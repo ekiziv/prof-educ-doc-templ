@@ -3,7 +3,6 @@ import picture
 
 import streamlit as st
 import pandas as pd
-import docx
 from docx import Document
 import datetime
 from docxtpl import DocxTemplate

@@ -1,5 +1,4 @@
 # Date formatting
-import docx
 import streamlit as st
 import pandas as pd
 import pickle
