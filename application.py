@@ -164,6 +164,7 @@ def create_tractor_certificate(replacement_dict, students):
         local_dict = replacement_dict.copy()
         local_dict[NAME_KEY] = student[NAME_KEY]
         local_dict[CERTIFICATE_KEY] = student[CERTIFICATE_KEY]
+        local_dict[MACHINE_CATEGORY] = student[MACHINE_CATEGORY]
 
         doc = DocxTemplate('templates/Свидетельство_трактор.docx')
         doc.render(local_dict)  # Assuming you have a 'render' method defined
@@ -176,6 +177,7 @@ def create_tractor_certificate(replacement_dict, students):
     local_dict = replacement_dict.copy()
     local_dict[NAME_KEY] = students[0][NAME_KEY]
     local_dict[CERTIFICATE_KEY] = students[0][CERTIFICATE_KEY]
+    local_dict[MACHINE_CATEGORY] = students[0][MACHINE_CATEGORY]
     final_doc.render(local_dict)
 
     utils.set_default_font(final_doc)
@@ -311,6 +313,7 @@ for line in student_names:
         student_data.append({
             NAME_KEY: name,
             CERTIFICATE_KEY: int(float(certificate_number)),
+            MACHINE_CATEGORY: category[0] if category else ''
         })
 num_students = len(student_data)
 
