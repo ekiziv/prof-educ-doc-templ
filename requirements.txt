@@ -1,4 +1,2 @@
 python-docx
 docxtpl
-pandas
-streamlit

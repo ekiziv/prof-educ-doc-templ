@@ -102,14 +102,14 @@ def create_certificate(replacement_dict, students):
         local_dict[NAME_KEY] = student[NAME_KEY]
         local_dict[CERTIFICATE_KEY] = student[CERTIFICATE_KEY]
 
-        doc = DocxTemplate('/Users/ekiziv/Desktop/mama/work/templates/свидетельство.docx')
+        doc = DocxTemplate('templates/свидетельство.docx')
         doc.render(local_dict)  # Assuming you have a 'render' method defined
 
         paragraphs = doc.tables[0].cell(0, 0).paragraphs
         all_paragraphs.append(paragraphs)
 
     # Create final document using the first student's data as a base
-    final_doc = DocxTemplate('/Users/ekiziv/Desktop/mama/work/templates/свидетельство.docx')
+    final_doc = DocxTemplate('templates/свидетельство.docx')
     local_dict = replacement_dict.copy()
     local_dict[NAME_KEY] = students[0][NAME_KEY]
     local_dict[CERTIFICATE_KEY] = students[0][CERTIFICATE_KEY]
@@ -138,7 +138,7 @@ def create_certificate(replacement_dict, students):
             new_paragraph = target_cell.add_paragraph('')
             source_paragraph = source_cell.paragraphs[p_i]
             if p_i == 0: 
-                picture.add_float_picture(new_paragraph, '/Users/ekiziv/Desktop/mama/work/pictures/basic-cert-background.png', width=Inches(5.6), height=Inches(4.04), pos_x=Pt(0), pos_y=Pt(0))
+                picture.add_float_picture(new_paragraph, 'pictures/basic-cert-background.png', width=Inches(5.6), height=Inches(4.04), pos_x=Pt(0), pos_y=Pt(0))
 
             new_paragraph.alignment = source_paragraph.alignment
             new_paragraph.paragraph_format.left_indent = source_paragraph.paragraph_format.left_indent
@@ -157,14 +157,14 @@ def create_tractor_certificate(replacement_dict, students):
         local_dict[NAME_KEY] = student[NAME_KEY]
         local_dict[CERTIFICATE_KEY] = student[CERTIFICATE_KEY]
 
-        doc = DocxTemplate('/Users/ekiziv/Desktop/mama/work/templates/Свидетельство_трактор.docx')
+        doc = DocxTemplate('templates/Свидетельство_трактор.docx')
         doc.render(local_dict)  # Assuming you have a 'render' method defined
 
         paragraphs = doc.tables[0].cell(0, 0).paragraphs
         all_paragraphs.append(paragraphs)
 
     # Create final document using the first student's data as a base
-    final_doc = DocxTemplate('/Users/ekiziv/Desktop/mama/work/templates/Свидетельство_трактор.docx')
+    final_doc = DocxTemplate('templates/Свидетельство_трактор.docx')
     local_dict = replacement_dict.copy()
     local_dict[NAME_KEY] = students[0][NAME_KEY]
     local_dict[CERTIFICATE_KEY] = students[0][CERTIFICATE_KEY]
@@ -194,7 +194,7 @@ def create_tractor_certificate(replacement_dict, students):
         for p_i, paragraph in enumerate(paragraphs):
             new_paragraph = left_cell.add_paragraph()
             if p_i == 0:
-                picture.add_float_picture(new_paragraph, '/Users/ekiziv/Desktop/mama/work/pictures/tractor-cert.png', width=Inches(8.03), height=Inches(5.58), pos_x=Pt(0), pos_y=Pt(0))
+                picture.add_float_picture(new_paragraph, 'pictures/tractor-cert.png', width=Inches(8.03), height=Inches(5.58), pos_x=Pt(0), pos_y=Pt(0))
             source_paragraph = source_left_cell.paragraphs[p_i]
             new_paragraph.alignment = source_paragraph.alignment
             new_paragraph.paragraph_format.left_indent = source_paragraph.paragraph_format.left_indent
@@ -215,7 +215,7 @@ def create_tractor_certificate(replacement_dict, students):
 def create_beginning_document(beginning_dict, students):
     """Creates a Word document with the provided information."""
 
-    doc = DocxTemplate('/Users/ekiziv/Desktop/mama/work/templates/Приказ о начале.docx')
+    doc = DocxTemplate('templates/Приказ о начале.docx')
     doc.render(beginning_dict) 
     utils.set_default_font(doc)
     table = doc.tables[0] 
@@ -235,7 +235,7 @@ def create_beginning_document(beginning_dict, students):
 def create_end_doc(replacement_dict, students):
     """Creates a Word document with the provided information."""
 
-    doc = DocxTemplate('/Users/ekiziv/Desktop/mama/work/templates/Приказ о выпуске.docx')
+    doc = DocxTemplate('templates/Приказ о выпуске.docx')
     doc.render(replacement_dict) 
     utils.set_default_font(doc)
     table = doc.tables[0] 
@@ -256,7 +256,7 @@ def create_end_doc(replacement_dict, students):
 def create_protocol_doc(replacement_dict, students):
     """Creates a Word document with the provided information."""
 
-    doc = DocxTemplate('/Users/ekiziv/Desktop/mama/work/templates/Протокол.docx')
+    doc = DocxTemplate('templates/Протокол.docx')
     doc.render(replacement_dict) 
     utils.set_default_font(doc)
     table = doc.tables[0] 
