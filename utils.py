@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import pickle
 import copy
+import docx
 from docx.shared import Pt
 
 

@@ -8,6 +8,7 @@ import datetime
 from docxtpl import DocxTemplate
 from io import BytesIO
 import zipfile
+import docx
 from docx.oxml import OxmlElement
 from docx.shared import Inches, Pt
 from docx.oxml import register_element_cls
@@ -67,14 +68,13 @@ def choose_profession(all_professions):
 
     # Checkbox to trigger new profession input
     add_new = st.checkbox("Добавить новую программу обучения?")
-    new_profession = None  # Initialize to None
+    new_profession = None 
 
     if add_new:  # Only show input if checkbox is checked
         new_profession = st.text_input("Введите название новой программы:")
         new_code = st.text_input("Введите код:")
         if st.button("Добавить программу"):
             if new_profession:
-                # Assuming all_professions is a dictionary now
                 code_int = -1
                 try: 
                     code_int = int(new_code)
@@ -97,13 +97,13 @@ def create_certificate(replacement_dict, students):
         return Document()
 
     all_paragraphs = []
-    for student in students[1:]:  # Skip the first student for now
+    for student in students[1:]: 
         local_dict = replacement_dict.copy()
         local_dict[NAME_KEY] = student[NAME_KEY]
         local_dict[CERTIFICATE_KEY] = student[CERTIFICATE_KEY]
 
         doc = DocxTemplate('templates/свидетельство.docx')
-        doc.render(local_dict)  # Assuming you have a 'render' method defined
+        doc.render(local_dict)
 
         paragraphs = doc.tables[0].cell(0, 0).paragraphs
         all_paragraphs.append(paragraphs)
@@ -120,7 +120,6 @@ def create_certificate(replacement_dict, students):
 
     # Get the table and add rows for each additional student
     table = final_doc.tables[0]
-    certificates_more = 2
     for paragraphs in all_paragraphs:
         row = table.add_row()
         # this ensure that the rows are not split between pages https://github.com/python-openxml/python-docx/issues/245
@@ -250,7 +249,6 @@ def create_end_doc(replacement_dict, students):
         new_row.cells[2].text = replacement_dict['student_company']
         new_row.cells[3].text = str(student[CERTIFICATE_KEY])
 
-        # Add more cells for other data (profession, date, etc.) if needed 
     return doc
 
 def create_protocol_doc(replacement_dict, students):
@@ -271,7 +269,6 @@ def create_protocol_doc(replacement_dict, students):
         new_row.cells[2].text = replacement_dict['student_company']
         new_row.cells[3].text = str(student[CERTIFICATE_KEY])
 
-        # Add more cells for other data (profession, date, etc.) if needed 
     return doc
 
 st.title("Профессиональное обучение")
