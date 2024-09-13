@@ -25,7 +25,7 @@ def choose_teacher(all_teachers):
     Returns a tuple (teacher_name, company) if a teacher is selected or added.
     """
     selected_teacher = st.selectbox(
-        "Выберите из списка:", all_teachers, index=None, placeholder="Преподаватели"
+        "Выберите преподавателя из списка:", all_teachers, index=None, placeholder="Преподаватели"
     )
 
     if selected_teacher:
@@ -59,7 +59,7 @@ def choose_profession(all_professions):
     controlled by a checkbox.
     """
     selected_item = st.selectbox(
-        "Выберите из следующих опций:",
+        "Выберите профессию/программу обучение из следующих опций:",
         all_professions,
         index=None,
         placeholder="Начинайте вводить название программы",
