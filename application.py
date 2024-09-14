@@ -292,11 +292,12 @@ st.title("Профессиональное обучение")
 available_professions = utils.load_from_pickle('data/professions.pickle')
 student_profession = choose_profession(available_professions)
 
-beginning_date = st.date_input('дата начала', value=datetime.date(2025, 1, 1))
-end_date = st.date_input('дата окончания', value=datetime.date(2025, 1, 1))
+today = datetime.date.today()
+beginning_date = st.date_input('дата начала', value=today)
+end_date = st.date_input('дата окончания', value=today)
 
-beginning_number = st.number_input("номер приказа о начале", value=0, step=1, placeholder=808)
-end_number = st.number_input("номер приказа об окончании", value=0, step=1, placeholder=808)
+beginning_number = st.number_input("номер приказа о начале", step=1, placeholder=808)
+end_number = st.number_input("номер приказа об окончании", step=1, placeholder=808)
 
 # this should be replaced by a scroll through
 teacher_name = choose_teacher(utils.load_from_pickle('data/teachers.pickle'))
@@ -328,7 +329,7 @@ replacement_dict = {
     'student_company': company,
     'teacher_name': teacher_name,
     'num_students': num_students,
-    'class': '3',
+    'class': '4',
     'year': beginning_date.year,
 }
 beginning_doc = create_beginning_document(replacement_dict, student_data)
@@ -395,10 +396,11 @@ with zipfile.ZipFile(zip_buffer, 'w') as zipf:
 
 zip_buffer.seek(0)
 
+formatted_end_date = end_date.strftime("%d.%m.%Y")
 # --- Download the ZIP archive ---
 st.download_button(
     label="Скачать документы (ZIP)",
     data=zip_buffer,
-    file_name=f'{company}-{student_profession}-{end_date}.zip',
+    file_name=f'{formatted_end_date}.zip',
     mime='application/zip'
 )
