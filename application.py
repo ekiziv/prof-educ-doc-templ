@@ -17,6 +17,12 @@ NAME_KEY = 'student_name'
 CERTIFICATE_KEY = 'certificate_number'
 MACHINE_CATEGORY = 'machine_category'
 
+CERT_HEIGHT_INCHES = 3.65
+CERT_WIDTH_INCHES = 5.6
+
+TRACTOR_CERT_HEIGHT = 5.58
+TRACTOR_CERT_WIDTH = 8.03
+
 register_element_cls('wp:anchor', picture.CT_Anchor)
 
 def choose_teacher(all_teachers):
@@ -145,7 +151,7 @@ def create_certificate(replacement_dict, students):
             source_paragraph = source_cell.paragraphs[p_i]
             if p_i == 0:
                 picture.add_float_picture(new_paragraph, 'pictures/basic-cert-background.png',
-                                          width=Inches(5.6), height=Inches(4.04), pos_x=Pt(0), pos_y=Pt(0))
+                                          width=Inches(CERT_WIDTH_INCHES), height=Inches(CERT_HEIGHT_INCHES))
 
             new_paragraph.alignment = source_paragraph.alignment
             new_paragraph.paragraph_format.left_indent = source_paragraph.paragraph_format.left_indent
@@ -205,7 +211,7 @@ def create_tractor_certificate(replacement_dict, students):
             new_paragraph = left_cell.add_paragraph()
             if p_i == 0:
                 picture.add_float_picture(new_paragraph, 'pictures/tractor-cert.png', width=Inches(
-                    8.03), height=Inches(5.58), pos_x=Pt(0), pos_y=Pt(0))
+                    TRACTOR_CERT_WIDTH), height=Inches(TRACTOR_CERT_HEIGHT))
             source_paragraph = source_left_cell.paragraphs[p_i]
             new_paragraph.alignment = source_paragraph.alignment
             new_paragraph.paragraph_format.left_indent = source_paragraph.paragraph_format.left_indent
