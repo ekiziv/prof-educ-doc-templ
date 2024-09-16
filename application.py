@@ -12,6 +12,9 @@ import docx
 from docx.oxml import OxmlElement
 from docx.shared import Inches, Pt
 from docx.oxml import register_element_cls
+import copy
+from docx.table import _Cell
+from lxml import etree
 
 NAME_KEY = 'student_name'
 CERTIFICATE_KEY = 'certificate_number'
@@ -20,10 +23,45 @@ MACHINE_CATEGORY = 'machine_category'
 CERT_HEIGHT_INCHES = 3.65
 CERT_WIDTH_INCHES = 5.6
 
-TRACTOR_CERT_HEIGHT = 5.58
-TRACTOR_CERT_WIDTH = 8.03
+TRACTOR_CERT_HEIGHT = 5.63
+TRACTOR_CERT_WIDTH = 8.04
 
 register_element_cls('wp:anchor', picture.CT_Anchor)
+
+def fit_more_rows(document):
+  """Attempts to fit more rows on a page in a Word document.
+
+  This function minimizes margins, removes unnecessary section breaks, 
+  and adjusts paragraph settings to prevent unwanted page breaks.
+
+  Args:
+    document_path: Path to the Word document.
+  """
+
+  # 1. Minimize Margins (as in the previous example)
+  for section in document.sections:
+    section.top_margin = Inches(0.2)
+    section.bottom_margin = Inches(0.2)
+    section.left_margin = Inches(0.2)
+    section.right_margin = Inches(0.2)
+    section.page_height = Inches(11.69)
+    section.page_width = Inches(8.27)
+
+#   2. Remove Unnecessary Section Breaks 
+#   (This might help if extra sections are causing page breaks)
+  while len(document.sections) > 1:  # Keep only one section
+    document.sections[0].start_type = WD_SECTION.CONTINUOUS 
+    document.sections[-1]._remove() 
+
+  # 3. Adjust Paragraph Settings to Avoid Page Breaks 
+  for paragraph in document.paragraphs:
+    paragraph.paragraph_format.keep_with_next = True  # Keep with next paragraph
+    paragraph.paragraph_format.page_break_before = False  # No page break before
+    paragraph.paragraph_format.widow_control = True # Prevents single lines from appearing at the top or bottom of a page
+    paragraph.paragraph_format.keep_lines_together = True # Keep all lines of a paragraph together on a page
+
+  return document
+
 
 def choose_teacher(all_teachers):
     """Handles teacher selection and adding new teachers,
@@ -160,74 +198,88 @@ def create_certificate(replacement_dict, students):
                 utils.preserve_formatting(new_run, source_run)
     return final_doc
 
+def dump(string_to_dump, name): 
+    file_path = f"{name}.txt"
 
-def create_tractor_certificate(replacement_dict, students):
+    with open(file_path, 'w') as file:
+        file.write(string_to_dump)
+
+def copy_table_element(source_tbl, target_tbl, element_name):
+    """Copies a specified table element from source to target table."""
+    source_element = source_tbl.find(element_name, namespaces=source_tbl.nsmap)
+    if source_element is not None:
+        target_element = target_tbl.find(element_name, namespaces=target_tbl.nsmap)
+        if target_element is not None:
+            target_tbl.remove(target_element)
+        target_tbl.insert(0, copy.deepcopy(source_element)) 
+
+def create_tractor_certificate(replacement_dict, students, picture_path):
     if not students:
         return Document()
-
-    all_paragraphs = []
-    for student in students[1:]:  # Skip the first student for now
+    
+    merged_doc = Document()
+    merged_doc = fit_more_rows(merged_doc)
+    
+    merged_table = merged_doc.add_table(rows=len(students), cols=0)
+    utils.set_default_font(merged_doc)
+    curr_index = 0
+    for student_index, student in enumerate(students):  # Skip the first student for now
         local_dict = replacement_dict.copy()
         local_dict[NAME_KEY] = student[NAME_KEY]
         local_dict[CERTIFICATE_KEY] = student[CERTIFICATE_KEY]
         local_dict[MACHINE_CATEGORY] = student[MACHINE_CATEGORY]
 
-        doc = DocxTemplate('templates/Свидетельство_трактор.docx')
-        doc.render(local_dict)  # Assuming you have a 'render' method defined
+        doc = DocxTemplate('templates/certificate_tractor.docx')
+        doc.render(local_dict)
 
-        paragraphs = doc.tables[0].cell(0, 0).paragraphs
-        all_paragraphs.append(paragraphs)
+        tbl = copy.deepcopy(doc.tables[0])
+        
+        if student_index == 0:
+            xml = etree.tostring(tbl._tbl, encoding='unicode', pretty_print=True)
+            dump(xml, 'og')
+            for element_name in ['w:tblGrid', 'w:tblPr']:
+                copy_table_element(tbl._tbl, merged_table._tbl, element_name)
 
-    # Create final document using the first student's data as a base
-    final_doc = DocxTemplate('templates/Свидетельство_трактор.docx')
-    local_dict = replacement_dict.copy()
-    local_dict[NAME_KEY] = students[0][NAME_KEY]
-    local_dict[CERTIFICATE_KEY] = students[0][CERTIFICATE_KEY]
-    local_dict[MACHINE_CATEGORY] = students[0][MACHINE_CATEGORY]
-    final_doc.render(local_dict)
+        for row_index in range(len(tbl._tbl.findall('.//w:tr', namespaces=tbl._tbl.nsmap))):  # Iterate using XML
+            print('current index:', curr_index)
+            target_row = merged_table.rows[curr_index]._element
+            source_row_element = tbl.rows[row_index]._element  # Get row's XML element
+            
+            # # --- Replace w:trPr in target_row ---
+            source_trPr = source_row_element.find('w:trPr', namespaces=source_row_element.nsmap)
+            target_trPr = target_row.find('w:trPr', namespaces=target_row.nsmap)
 
-    utils.set_default_font(final_doc)
+            if target_trPr is not None: 
+                target_row.remove(target_trPr)
 
-    # Get the table and add rows for each additional student
-    table = final_doc.tables[0]
-    for paragraphs in all_paragraphs:
-        row = table.add_row()
-        # this ensure that the rows are not split between pages https://github.com/python-openxml/python-docx/issues/245
-        trPr = row._tr.get_or_add_trPr()
-        trPr.append(OxmlElement('w:cantSplit'))
+            if source_trPr is not None:
+                print(etree.tostring(source_trPr, encoding='unicode', pretty_print=True))
+                target_row.insert(0, copy.deepcopy(source_trPr))
 
-        left_cell = row.cells[0]
-        right_cell = row.cells[1]
+            curr_index += 1
 
-        source_right_cell = table.cell(0, 1)
-        source_left_cell = table.cell(0, 0)
+            # --- Copy cells from source row to target row ---
+            for source_cell in source_row_element.findall('.//w:tc', namespaces=source_row_element.nsmap):
+                target_row.append(copy.deepcopy(source_cell))
+            
+            first_cell = merged_table.rows[curr_index - 1].cells[0]
+            p = first_cell.add_paragraph()
+            picture.add_float_picture(p, picture_path, height=Inches(TRACTOR_CERT_HEIGHT), width=Inches(TRACTOR_CERT_WIDTH), pos_x=Pt(0), pos_y=Pt(0))
+        
+    xml = etree.tostring(merged_table._tbl, encoding='unicode', pretty_print=True)
+    dump(xml, 'merged_table')
 
-        # Copy cell properties from the template cell
-        utils.copy_cell_properties(source_left_cell, left_cell)
-        utils.copy_cell_properties(source_right_cell, right_cell)
+    final_table = merged_doc.tables[0]
+    for row in final_table.rows:
+        for cell in row.cells:
+            cell.top_padding = Pt(0)
+            cell.bottom_padding = Pt(0) 
+    return merged_doc
 
-        # Populate left cell
-        for p_i, paragraph in enumerate(paragraphs):
-            new_paragraph = left_cell.add_paragraph()
-            if p_i == 0:
-                picture.add_float_picture(new_paragraph, 'pictures/tractor-cert.png', width=Inches(
-                    TRACTOR_CERT_WIDTH), height=Inches(TRACTOR_CERT_HEIGHT))
-            source_paragraph = source_left_cell.paragraphs[p_i]
-            new_paragraph.alignment = source_paragraph.alignment
-            new_paragraph.paragraph_format.left_indent = source_paragraph.paragraph_format.left_indent
-
-            for target_run, source_run in zip(paragraph.runs, source_paragraph.runs):
-                new_run = new_paragraph.add_run(target_run.text)
-                new_run = utils.preserve_formatting(new_run, source_run)
-
-        for p in source_right_cell.paragraphs:
-            new_paragraph = right_cell.add_paragraph('')
-            new_paragraph.alignment = p.alignment
-            for source_run in p.runs:
-                new_run = new_paragraph.add_run(source_run.text)
-                new_run = utils.preserve_formatting(new_run, source_run)
-    return final_doc
-
+def create_tractor_certs(beginning_dict, students): 
+    blue = create_tractor_certificate(beginning_dict, students, 'pictures/tractor-background-blue.png')
+    green = create_tractor_certificate(beginning_dict, students, 'pictures/tractor-background-green.png')
+    return (blue, green)
 
 def create_beginning_document(beginning_dict, students):
     """Creates a Word document with the provided information."""
@@ -302,8 +354,8 @@ today = datetime.date.today()
 beginning_date = st.date_input('дата начала', value=today)
 end_date = st.date_input('дата окончания', value=today)
 
-beginning_number = st.number_input("номер приказа о начале", step=1, placeholder=808)
-end_number = st.number_input("номер приказа об окончании", step=1, placeholder=808)
+beginning_number = st.number_input("номер приказа о начале", step=1, value=1, placeholder=808)
+end_number = st.number_input("номер приказа об окончании", step=1, value=1, placeholder=808)
 
 # this should be replaced by a scroll through
 teacher_name = choose_teacher(utils.load_from_pickle('data/teachers.pickle'))
@@ -342,7 +394,7 @@ beginning_doc = create_beginning_document(replacement_dict, student_data)
 end_doc = create_end_doc(replacement_dict, student_data)
 protocol = create_protocol_doc(replacement_dict, student_data)
 certificate_docs = create_certificate(replacement_dict, student_data)
-tractor_cert_doc = create_tractor_certificate(replacement_dict, student_data)
+(blue_tractor_cert, green_tractor_cert) = create_tractor_certs(replacement_dict, student_data)
 
 show_documents = st.button("Сгенерировать документы")
 
@@ -364,7 +416,7 @@ if show_documents:
 
     if student_profession and teacher_name and beginning_date and end_date and beginning_number and end_number:
         document_tabs = st.tabs(["Приказ о начале", "Приказ об окончании",
-                                "Протокол", "Свидетельство", "Свидетельство тракторов"])
+                                "Протокол", "Свидетельство", "Свидетельство тракторов синее", "Свидетельство тракторов зеленое"])
         with document_tabs[0]:  # Приказ о начале
             utils.display_docx_content(beginning_doc)
 
@@ -378,7 +430,10 @@ if show_documents:
             utils.display_docx_content(certificate_docs)
 
         with document_tabs[4]:  # Свидетельство тракторов
-            utils.display_docx_content(tractor_cert_doc)
+            utils.display_docx_content(blue_tractor_cert)
+        
+        with document_tabs[5]: 
+            utils.display_docx_content(green_tractor_cert)
 
 # --- Create a ZIP archive in memory ---
 zip_buffer = BytesIO()
@@ -397,8 +452,11 @@ with zipfile.ZipFile(zip_buffer, 'w') as zipf:
     with zipf.open('Свидетельство.docx', 'w') as f:
         certificate_docs.save(f)
 
-    with zipf.open('Свидетельство трактор.docx', 'w') as f:
-        tractor_cert_doc.save(f)
+    with zipf.open('Свидетельство синее трактор.docx', 'w') as f:
+        blue_tractor_cert.save(f)
+
+    with zipf.open('Свидетельство зеленое трактор.docx', 'w') as f:
+        green_tractor_cert.save(f)
 
 zip_buffer.seek(0)
 
