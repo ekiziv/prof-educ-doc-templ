@@ -20,6 +20,8 @@ NAME_KEY = 'student_name'
 CERTIFICATE_KEY = 'certificate_number'
 MACHINE_CATEGORY = 'machine_category'
 
+TRACTOR_PROFESSION_WORDING = '19203 «Тракторист»'
+
 CERT_HEIGHT_INCHES = 3.65
 CERT_WIDTH_INCHES = 5.6
 
@@ -204,6 +206,15 @@ def dump(string_to_dump, name):
     with open(file_path, 'w') as file:
         file.write(string_to_dump)
 
+def addTrPr(source_row_element, target_row):
+    source_trPr = source_row_element.find('w:trPr', namespaces=source_row_element.nsmap)
+    if source_trPr is not None:
+        # Example: Copy only the row height
+        tr_height = source_trPr.find('./w:trHeight', namespaces=source_trPr.nsmap)
+        if tr_height is not None:
+            target_row.append(copy.deepcopy(tr_height))  
+        target_row.append(OxmlElement('w:cantSplit'))
+
 def copy_table_element(source_tbl, target_tbl, element_name):
     """Copies a specified table element from source to target table."""
     source_element = source_tbl.find(element_name, namespaces=source_tbl.nsmap)
@@ -213,17 +224,75 @@ def copy_table_element(source_tbl, target_tbl, element_name):
             target_tbl.remove(target_element)
         target_tbl.insert(0, copy.deepcopy(source_element)) 
 
+
+def update_nested_table_styles(source_cell, source_row_element):
+    """Updates line spacing after to 0 for all paragraphs in a nested table."""
+
+    nested_table = source_cell.find('.//w:tbl', namespaces=source_row_element.nsmap)
+    if nested_table: 
+        print('There is a nested table')
+
+        # Find all paragraphs within the nested table
+        for paragraph in nested_table.findall('.//w:p', namespaces=source_row_element.nsmap):
+            pPr = paragraph.find('./w:pPr', namespaces=source_row_element.nsmap)
+
+            if pPr is not None:
+                spacing = pPr.find('./w:spacing', namespaces=source_row_element.nsmap)
+                if spacing is None:
+                    spacing = OxmlElement('w:spacing')
+                    pPr.append(spacing)
+
+                # Set line spacing after to 0
+                spacing.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}after', '0') 
+
+def add_student_content_to_merged_table(merged_table, tbl, student_index, curr_index, picture_path): 
+    
+    if student_index == 0:
+        for element_name in ['w:tblGrid', 'w:tblPr']:
+            copy_table_element(tbl._tbl, merged_table._tbl, element_name)
+        xml = etree.tostring(tbl._tbl, encoding='unicode', pretty_print=True)
+        dump(xml, 'og table')
+
+    for row_index in range(len(tbl._tbl.findall('./w:tr', namespaces=tbl._tbl.nsmap))):  # Iterate using XML
+        print('curr index:', curr_index)
+        target_row = merged_table.rows[curr_index]._element
+        source_row_element = tbl.rows[row_index]._element
+
+        addTrPr(source_row_element, target_row)
+
+        # --- Copy cells from source row to target row ---
+        source_row_cells = source_row_element.findall('./w:tc', namespaces=source_row_element.nsmap)
+        for col_index, source_cell in enumerate(source_row_cells):
+            target_cell = target_row[col_index]
+            for child in source_cell:
+                xml = etree.tostring(source_cell, encoding='unicode', pretty_print=True)
+
+                update_nested_table_styles(source_cell, source_row_element)
+
+                xml = etree.tostring(source_cell, encoding='unicode', pretty_print=True)
+                target_cell.append(copy.deepcopy(child))
+
+        first_cell = merged_table.rows[curr_index].cells[0]
+        print('adding picture at row ', curr_index)
+        curr_index += 1
+        p = first_cell.add_paragraph()
+        picture.add_float_picture(p, picture_path, height=Inches(TRACTOR_CERT_HEIGHT), width=Inches(TRACTOR_CERT_WIDTH), pos_x=Pt(0), pos_y=Pt(0))
+
+
 def create_tractor_certificate(replacement_dict, students, picture_path):
     if not students:
         return Document()
     
     merged_doc = Document()
     merged_doc = fit_more_rows(merged_doc)
-    
-    merged_table = merged_doc.add_table(rows=len(students), cols=0)
     utils.set_default_font(merged_doc)
-    curr_index = 0
-    for student_index, student in enumerate(students):  # Skip the first student for now
+
+    merged_table = merged_doc.add_table(rows=len(students), cols=2)
+    merged_tractor_table = merged_doc.add_table(rows=len(students), cols=2)
+    
+    curr_index = 0    
+    for student_index, student in enumerate(students): 
+        print('Considering student', student_index)
         local_dict = replacement_dict.copy()
         local_dict[NAME_KEY] = student[NAME_KEY]
         local_dict[CERTIFICATE_KEY] = student[CERTIFICATE_KEY]
@@ -232,40 +301,14 @@ def create_tractor_certificate(replacement_dict, students, picture_path):
         doc = DocxTemplate('templates/certificate_tractor.docx')
         doc.render(local_dict)
 
-        tbl = copy.deepcopy(doc.tables[0])
+        add_student_content_to_merged_table(merged_table, doc.tables[0], student_index, curr_index, picture_path)
+        add_student_content_to_merged_table(merged_tractor_table, doc.tables[1], student_index, curr_index, picture_path)
+        curr_index += 1
+
         
-        if student_index == 0:
-            xml = etree.tostring(tbl._tbl, encoding='unicode', pretty_print=True)
-            dump(xml, 'og')
-            for element_name in ['w:tblGrid', 'w:tblPr']:
-                copy_table_element(tbl._tbl, merged_table._tbl, element_name)
 
-        for row_index in range(len(tbl._tbl.findall('.//w:tr', namespaces=tbl._tbl.nsmap))):  # Iterate using XML
-            print('current index:', curr_index)
-            target_row = merged_table.rows[curr_index]._element
-            source_row_element = tbl.rows[row_index]._element  # Get row's XML element
-            
-            # # --- Replace w:trPr in target_row ---
-            source_trPr = source_row_element.find('w:trPr', namespaces=source_row_element.nsmap)
-            target_trPr = target_row.find('w:trPr', namespaces=target_row.nsmap)
+    print('Len the of merged_table outside of the loop, at the end:', len(merged_table.rows))
 
-            if target_trPr is not None: 
-                target_row.remove(target_trPr)
-
-            if source_trPr is not None:
-                print(etree.tostring(source_trPr, encoding='unicode', pretty_print=True))
-                target_row.insert(0, copy.deepcopy(source_trPr))
-
-            curr_index += 1
-
-            # --- Copy cells from source row to target row ---
-            for source_cell in source_row_element.findall('.//w:tc', namespaces=source_row_element.nsmap):
-                target_row.append(copy.deepcopy(source_cell))
-            
-            first_cell = merged_table.rows[curr_index - 1].cells[0]
-            p = first_cell.add_paragraph()
-            picture.add_float_picture(p, picture_path, height=Inches(TRACTOR_CERT_HEIGHT), width=Inches(TRACTOR_CERT_WIDTH), pos_x=Pt(0), pos_y=Pt(0))
-        
     xml = etree.tostring(merged_table._tbl, encoding='unicode', pretty_print=True)
     dump(xml, 'merged_table')
 
@@ -276,10 +319,12 @@ def create_tractor_certificate(replacement_dict, students, picture_path):
             cell.bottom_padding = Pt(0) 
     return merged_doc
 
-def create_tractor_certs(beginning_dict, students): 
-    blue = create_tractor_certificate(beginning_dict, students, 'pictures/tractor-background-blue.png')
-    green = create_tractor_certificate(beginning_dict, students, 'pictures/tractor-background-green.png')
-    return (blue, green)
+def create_tractor_certs(dict, students): 
+    # blue = create_tractor_certificate(dict, students, 'pictures/tractor-background-blue.png')
+    dict_with_profession_replaced = dict.copy()
+    dict_with_profession_replaced['student_profession'] = TRACTOR_PROFESSION_WORDING
+    green = create_tractor_certificate(dict_with_profession_replaced, students, 'pictures/tractor-background-green.png')
+    return (green, green)
 
 def create_beginning_document(beginning_dict, students):
     """Creates a Word document with the provided information."""
