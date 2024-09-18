@@ -28,11 +28,13 @@ TRACTOR_CERT_WIDTH = 8.04
 
 register_element_cls("wp:anchor", picture.CT_Anchor)
 
+import streamlit as st
+import utils
+
+
 def choose_teacher(all_teachers):
-    """Handles teacher selection and adding new teachers,
-    controlled by a checkbox.
-    Returns a tuple (teacher_name, company) if a teacher is selected or added.
-    """
+    """Handles teacher selection and adding new teachers."""
+
     selected_teacher = st.selectbox(
         "Выберите преподавателя из списка:",
         all_teachers,
@@ -43,31 +45,36 @@ def choose_teacher(all_teachers):
     if selected_teacher:
         st.write(f"Преподаватель: {selected_teacher}")
 
-    # Checkbox to trigger new teacher input
     add_new = st.checkbox("Добавить нового преподавателя?")
-    new_teacher = None
+
+    # Initialize new_teacher in session state
+    if "new_teacher" not in st.session_state:
+        st.session_state.new_teacher = None
 
     if add_new:
-        new_teacher = st.text_input("Введите ФИО нового преподавателя:")
+        new_teacher = st.text_input("Введите инициалы и фамилию нового преподавателя:")
         if st.button("Добавить преподавателя"):
             if new_teacher and new_teacher not in all_teachers:
                 all_teachers.append(new_teacher)
                 utils.save_data(all_teachers, "data/teachers.pickle")
                 st.success(f"Преподаватель '{new_teacher}' добавлен!")
-                return new_teacher
+                # Store new_teacher in session state
+                st.session_state.new_teacher = new_teacher
             else:
-                st.warning("Введите ФИО преподавателя и место работы.")
+                st.warning("Преподаватель уже существует или не введен.")
 
-    if selected_teacher:
+    # Return the teacher based on session state and selection
+    if st.session_state.new_teacher:
+        return st.session_state.new_teacher
+    elif selected_teacher:
         return selected_teacher
-
-    return None
+    else:
+        return None
 
 
 def choose_profession(all_professions):
-    """Handles profession selection and adding new professions,
-    controlled by a checkbox.
-    """
+    """Handles profession selection and adding new professions."""
+
     selected_item = st.selectbox(
         "Выберите профессию/программу обучение из следующих опций:",
         all_professions,
@@ -78,11 +85,12 @@ def choose_profession(all_professions):
     if selected_item:
         st.write(f"Программа обучения: {selected_item}")
 
-    # Checkbox to trigger new profession input
     add_new = st.checkbox("Добавить новую программу обучения?")
-    new_profession = None
 
-    if add_new:  # Only show input if checkbox is checked
+    if "new_profession" not in st.session_state:
+        st.session_state.new_profession = None
+
+    if add_new:
         new_profession = st.text_input("Введите название новой программы:")
         new_code = st.text_input("Введите код:")
         if st.button("Добавить программу"):
@@ -92,21 +100,27 @@ def choose_profession(all_professions):
                     code_int = int(new_code)
                     all_professions[new_profession] = [code_int]
                 except Exception as e:
-                    print('Failed to parse the profession code')
+                    print("Failed to parse the profession code")
                     all_professions[new_profession] = [-1]
                 utils.save_data(all_professions, filename="data/professions.pickle")
                 st.success(f"Программа '{new_profession}' добавлена!")
-                # Return the new profession if added
-                return f"{code_int} «{new_profession}»"
+                st.session_state.new_profession = new_profession
             else:
-                st.warning("Программа уже существует или не введена.")
-    if selected_item:
+                st.warning("Программа не введена.")
+
+    if st.session_state.new_profession:
+        code_int = all_professions[st.session_state.new_profession][0]
+        if code_int == -1: 
+            return f"«{st.session_state.new_profession}»"
+        return f"{code_int} «{st.session_state.new_profession}»"
+    elif selected_item:
         selected_profession_code = all_professions[selected_item]
         selected_profession_code_str = ", ".join(
             str(code) for code in selected_profession_code
         )
         return f"{selected_profession_code_str} «{selected_item}»"
-    return None, None
+    else:
+        return None
 
 
 def create_certificate(replacement_dict, students):
@@ -321,6 +335,7 @@ st.title("Профессиональное обучение")
 # Input 1: Text Input
 available_professions = utils.load_from_pickle("data/professions.pickle")
 student_profession = choose_profession(available_professions)
+print(student_profession)
 
 today = datetime.date.today()
 beginning_date = st.date_input("дата начала", value=today)
