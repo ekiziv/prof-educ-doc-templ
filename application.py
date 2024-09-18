@@ -8,6 +8,7 @@ from docxtpl import DocxTemplate
 from io import BytesIO
 import zipfile
 import copy
+from lxml import etree
 
 from docx import Document
 from docx.oxml import OxmlElement
@@ -20,107 +21,45 @@ MACHINE_CATEGORY = "machine_category"
 
 TRACTOR_PROFESSION_WORDING = "19203 «Тракторист»"
 
-CERT_HEIGHT_INCHES = 3.65
-CERT_WIDTH_INCHES = 5.6
+CERT_HEIGHT_INCHES = Inches(3.65)
+CERT_WIDTH_INCHES = Inches(5.6)
 
-TRACTOR_CERT_HEIGHT = 5.63
-TRACTOR_CERT_WIDTH = 8.04
+TRACTOR_CERT_HEIGHT = Inches(5.63)
+TRACTOR_CERT_WIDTH = Inches(8.04)
 
 register_element_cls("wp:anchor", picture.CT_Anchor)
 
-import streamlit as st
-import utils
 
+def create_confirmation_page(replacement_dict, students, picture_path):
+    if not students:
+        return Document()
 
-def choose_teacher(all_teachers):
-    """Handles teacher selection and adding new teachers."""
+    merged_doc = Document()
+    merged_doc = utils.fit_more_rows(merged_doc)
+    utils.set_default_font(merged_doc)
 
-    selected_teacher = st.selectbox(
-        "Выберите преподавателя из списка:",
-        all_teachers,
-        index=None,
-        placeholder="Преподаватели",
-    )
+    merged_table = merged_doc.add_table(rows=len(students), cols=2)
+    merged_tractor_table = merged_doc.add_table(rows=len(students), cols=2)
 
-    if selected_teacher:
-        st.write(f"Преподаватель: {selected_teacher}")
+    curr_index = 0
+    for student_index, student in enumerate(students):
+        local_dict = replacement_dict.copy()
+        local_dict[NAME_KEY] = student[NAME_KEY]
+        local_dict[CERTIFICATE_KEY] = student[CERTIFICATE_KEY]
+        local_dict[MACHINE_CATEGORY] = student[MACHINE_CATEGORY]
 
-    add_new = st.checkbox("Добавить нового преподавателя?")
+        doc = DocxTemplate("templates/milana_conf_page.docx")
+        doc.render(local_dict)
 
-    # Initialize new_teacher in session state
-    if "new_teacher" not in st.session_state:
-        st.session_state.new_teacher = None
-
-    if add_new:
-        new_teacher = st.text_input("Введите инициалы и фамилию нового преподавателя:")
-        if st.button("Добавить преподавателя"):
-            if new_teacher and new_teacher not in all_teachers:
-                all_teachers.append(new_teacher)
-                utils.save_data(all_teachers, "data/teachers.pickle")
-                st.success(f"Преподаватель '{new_teacher}' добавлен!")
-                # Store new_teacher in session state
-                st.session_state.new_teacher = new_teacher
-            else:
-                st.warning("Преподаватель уже существует или не введен.")
-
-    # Return the teacher based on session state and selection
-    if st.session_state.new_teacher:
-        return st.session_state.new_teacher
-    elif selected_teacher:
-        return selected_teacher
-    else:
-        return None
-
-
-def choose_profession(all_professions):
-    """Handles profession selection and adding new professions."""
-
-    selected_item = st.selectbox(
-        "Выберите профессию/программу обучение из следующих опций:",
-        all_professions,
-        index=None,
-        placeholder="Начинайте вводить название программы",
-    )
-
-    if selected_item:
-        st.write(f"Программа обучения: {selected_item}")
-
-    add_new = st.checkbox("Добавить новую программу обучения?")
-
-    if "new_profession" not in st.session_state:
-        st.session_state.new_profession = None
-
-    if add_new:
-        new_profession = st.text_input("Введите название новой программы:")
-        new_code = st.text_input("Введите код:")
-        if st.button("Добавить программу"):
-            if new_profession:
-                code_int = -1
-                try:
-                    code_int = int(new_code)
-                    all_professions[new_profession] = [code_int]
-                except Exception as e:
-                    print("Failed to parse the profession code")
-                    all_professions[new_profession] = [-1]
-                utils.save_data(all_professions, filename="data/professions.pickle")
-                st.success(f"Программа '{new_profession}' добавлена!")
-                st.session_state.new_profession = new_profession
-            else:
-                st.warning("Программа не введена.")
-
-    if st.session_state.new_profession:
-        code_int = all_professions[st.session_state.new_profession][0]
-        if code_int == -1: 
-            return f"«{st.session_state.new_profession}»"
-        return f"{code_int} «{st.session_state.new_profession}»"
-    elif selected_item:
-        selected_profession_code = all_professions[selected_item]
-        selected_profession_code_str = ", ".join(
-            str(code) for code in selected_profession_code
+        add_student_content_to_merged_table(
+            merged_table, doc.tables[0], student_index, curr_index, picture_path, picture_height=Inches(5.54), picture_width=Inches(7.85)
         )
-        return f"{selected_profession_code_str} «{selected_item}»"
-    else:
-        return None
+        add_student_content_to_merged_table(
+            merged_tractor_table, doc.tables[1], student_index, curr_index, picture_path, picture_height=Inches(5.54), picture_width=Inches(7.85)
+        ) 
+        curr_index += 1
+
+    return merged_doc
 
 
 def create_certificate(replacement_dict, students):
@@ -171,8 +110,8 @@ def create_certificate(replacement_dict, students):
                 picture.add_float_picture(
                     new_paragraph,
                     "pictures/basic-cert-background.png",
-                    width=Inches(CERT_WIDTH_INCHES),
-                    height=Inches(CERT_HEIGHT_INCHES),
+                    width=CERT_WIDTH_INCHES,
+                    height=CERT_HEIGHT_INCHES,
                 )
 
             new_paragraph.alignment = source_paragraph.alignment
@@ -186,8 +125,10 @@ def create_certificate(replacement_dict, students):
 
 
 def add_student_content_to_merged_table(
-    merged_table, tbl, student_index, curr_index, picture_path
+    merged_table, tbl, student_index, curr_index, picture_path, picture_height=None, picture_width=None
 ):
+    xml = etree.tostring(tbl._tbl, encoding='unicode', pretty_print=True)
+    utils.dump(xml, 'og table')
     if student_index == 0:
         for element_name in ["w:tblGrid", "w:tblPr"]:
             utils.copy_table_element(tbl._tbl, merged_table._tbl, element_name)
@@ -209,6 +150,17 @@ def add_student_content_to_merged_table(
             for child in source_cell:
                 utils.update_nested_table_styles(source_cell, source_row_element)
                 target_cell.append(copy.deepcopy(child))
+        
+        for cell in merged_table.rows[curr_index].cells:
+            for paragraph in cell.paragraphs:
+                for run in paragraph.runs:
+                    if "prof_educ_logo" in run.text:
+                        run.text = run.text.replace("prof_educ_logo", "") 
+                        run.add_picture('pictures/professional-education-logo.png')
+                    if "bigger_educ_logo" in run.text:
+                        run.text = run.text.replace("bigger_educ_logo", "") 
+                        run.add_picture('pictures/professional-education-logo.png', width=Inches(1.53), height=Inches(1.09))
+                    
 
         first_cell = merged_table.rows[curr_index].cells[0]
         curr_index += 1
@@ -216,11 +168,13 @@ def add_student_content_to_merged_table(
         picture.add_float_picture(
             p,
             picture_path,
-            height=Inches(TRACTOR_CERT_HEIGHT),
-            width=Inches(TRACTOR_CERT_WIDTH),
+            height=picture_height,
+            width=picture_width,
             pos_x=Pt(0),
             pos_y=Pt(0),
         )
+    xml = etree.tostring(merged_table._tbl, encoding='unicode', pretty_print=True)
+    utils.dump(xml, 'merged table')
 
 
 def create_tractor_certificate(replacement_dict, students, picture_path):
@@ -245,10 +199,10 @@ def create_tractor_certificate(replacement_dict, students, picture_path):
         doc.render(local_dict)
 
         add_student_content_to_merged_table(
-            merged_table, doc.tables[0], student_index, curr_index, picture_path
+            merged_table, doc.tables[0], student_index, curr_index, picture_path, picture_height=TRACTOR_CERT_HEIGHT, picture_width=TRACTOR_CERT_WIDTH
         )
         add_student_content_to_merged_table(
-            merged_tractor_table, doc.tables[1], student_index, curr_index, picture_path
+            merged_tractor_table, doc.tables[1], student_index, curr_index, picture_path, picture_height=TRACTOR_CERT_HEIGHT, picture_width=TRACTOR_CERT_WIDTH
         )
         curr_index += 1
 
@@ -334,8 +288,7 @@ st.title("Профессиональное обучение")
 
 # Input 1: Text Input
 available_professions = utils.load_from_pickle("data/professions.pickle")
-student_profession = choose_profession(available_professions)
-print(student_profession)
+student_profession = utils.choose_profession(available_professions)
 
 today = datetime.date.today()
 beginning_date = st.date_input("дата начала", value=today)
@@ -349,7 +302,7 @@ end_number = st.number_input(
 )
 
 # this should be replaced by a scroll through
-teacher_name = choose_teacher(utils.load_from_pickle("data/teachers.pickle"))
+teacher_name = utils.choose_teacher(utils.load_from_pickle("data/teachers.pickle"))
 
 company = st.text_input(
     "Предприятие", "заявление", placeholder="Наименование предприятия или 'заявление'"
@@ -392,6 +345,8 @@ certificate_docs = create_certificate(replacement_dict, student_data)
 (blue_tractor_cert, green_tractor_cert) = create_tractor_certs(
     replacement_dict, student_data
 )
+milana_conf_page = create_confirmation_page(replacement_dict, student_data, 'pictures/tractor-background-green.png')
+milana_cert = None
 
 show_documents = st.button("Сгенерировать документы")
 
@@ -427,6 +382,8 @@ if show_documents:
                 "Свидетельство",
                 "Свидетельство тракторов синее",
                 "Свидетельство тракторов зеленое",
+                "Милана удостоверение", 
+                "Милана св-во охрана труда",
             ]
         )
         with document_tabs[0]:  # Приказ о начале
@@ -446,6 +403,10 @@ if show_documents:
 
         with document_tabs[5]:
             utils.display_docx_content(green_tractor_cert)
+        with document_tabs[6]: 
+            utils.display_docx_content(milana_conf_page)
+        with document_tabs[7]: 
+            st.write('To be done')
 
 # --- Create a ZIP archive in memory ---
 zip_buffer = BytesIO()
@@ -469,6 +430,8 @@ with zipfile.ZipFile(zip_buffer, "w") as zipf:
 
     with zipf.open("Свидетельство зеленое трактор.docx", "w") as f:
         green_tractor_cert.save(f)
+    with zipf.open("Удостоверение Милана.docx", "w") as f:
+        milana_conf_page.save(f)
 
 zip_buffer.seek(0)
 

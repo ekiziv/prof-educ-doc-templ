@@ -8,6 +8,7 @@ from docx.shared import Inches, Pt
 from docx.oxml import OxmlElement
 
 
+
 # Russian month names mapping
 russian_months = {
     "January": "января",
@@ -23,7 +24,6 @@ russian_months = {
     "November": "ноября",
     "December": "декабря"
 }
-
 
 def format_date(date): 
     formatted_date = date.strftime("%d %B %Y") + " г."
@@ -185,3 +185,94 @@ def fit_more_rows(document):
         )
 
     return document
+
+
+def choose_teacher(all_teachers):
+    """Handles teacher selection and adding new teachers."""
+
+    selected_teacher = st.selectbox(
+        "Выберите преподавателя из списка:",
+        all_teachers,
+        index=None,
+        placeholder="Преподаватели",
+    )
+
+    if selected_teacher:
+        st.write(f"Преподаватель: {selected_teacher}")
+
+    add_new = st.checkbox("Добавить нового преподавателя?")
+
+    # Initialize new_teacher in session state
+    if "new_teacher" not in st.session_state:
+        st.session_state.new_teacher = None
+
+    if add_new:
+        new_teacher = st.text_input("Введите инициалы и фамилию нового преподавателя:")
+        if st.button("Добавить преподавателя"):
+            if new_teacher and new_teacher not in all_teachers:
+                all_teachers.append(new_teacher)
+                save_data(all_teachers, "data/teachers.pickle")
+                st.success(f"Преподаватель '{new_teacher}' добавлен!")
+                # Store new_teacher in session state
+                st.session_state.new_teacher = new_teacher
+            else:
+                st.warning("Преподаватель уже существует или не введен.")
+
+    # Return the teacher based on session state and selection
+    if st.session_state.new_teacher:
+        return st.session_state.new_teacher
+    elif selected_teacher:
+        return selected_teacher
+    else:
+        return None
+
+
+def choose_profession(all_professions):
+    """Handles profession selection and adding new professions."""
+
+    selected_item = st.selectbox(
+        "Выберите профессию/программу обучение из следующих опций:",
+        all_professions,
+        index=None,
+        placeholder="Начинайте вводить название программы",
+    )
+
+    if selected_item:
+        st.write(f"Программа обучения: {selected_item}")
+
+    add_new = st.checkbox("Добавить новую программу обучения?")
+
+    if "new_profession" not in st.session_state:
+        st.session_state.new_profession = None
+
+    if add_new:
+        new_profession = st.text_input("Введите название новой программы:")
+        new_code = st.text_input("Введите код:")
+        if st.button("Добавить программу"):
+            if new_profession:
+                code_int = -1
+                try:
+                    code_int = int(new_code)
+                    all_professions[new_profession] = [code_int]
+                except Exception as e:
+                    print("Failed to parse the profession code")
+                    all_professions[new_profession] = [-1]
+                save_data(all_professions, filename="data/professions.pickle")
+                st.success(f"Программа '{new_profession}' добавлена!")
+                st.session_state.new_profession = new_profession
+            else:
+                st.warning("Программа не введена.")
+
+    if st.session_state.new_profession:
+        code_int = all_professions[st.session_state.new_profession][0]
+        if code_int == -1:
+            return f"«{st.session_state.new_profession}»"
+        return f"{code_int} «{st.session_state.new_profession}»"
+    elif selected_item:
+        selected_profession_code = all_professions[selected_item]
+        selected_profession_code_str = ", ".join(
+            str(code) for code in selected_profession_code
+        )
+        return f"{selected_profession_code_str} «{selected_item}»"
+    else:
+        return None
