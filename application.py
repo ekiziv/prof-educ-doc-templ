@@ -265,7 +265,7 @@ def add_student_content_to_merged_table(
         )
 
 
-def create_tractor_certificate(replacement_dict, students, picture_path):
+def create_tractor_certificate(replacement_dict, students, picture_front, picture_back):
     if not students:
         return Document()
 
@@ -284,10 +284,10 @@ def create_tractor_certificate(replacement_dict, students, picture_path):
         doc.render(local_dict)
 
         add_student_content_to_merged_table(
-            merged_table, doc.tables[0], student_index, curr_index, picture_path, picture_height=TRACTOR_CERT_HEIGHT, picture_width=TRACTOR_CERT_WIDTH
+            merged_table, doc.tables[0], student_index, curr_index, picture_front, picture_height=TRACTOR_CERT_HEIGHT, picture_width=TRACTOR_CERT_WIDTH
         )
         add_student_content_to_merged_table(
-            merged_tractor_table, doc.tables[1], student_index, curr_index, picture_path, picture_height=TRACTOR_CERT_HEIGHT, picture_width=TRACTOR_CERT_WIDTH
+            merged_tractor_table, doc.tables[1], student_index, curr_index, picture_back, picture_height=TRACTOR_CERT_HEIGHT, picture_width=TRACTOR_CERT_WIDTH
         )
         curr_index += 1
 
@@ -296,12 +296,15 @@ def create_tractor_certificate(replacement_dict, students, picture_path):
 
 def create_tractor_certs(dict, students):
     blue = create_tractor_certificate(
-        dict, students, "pictures/tractor-background-blue.png"
+        dict, students, "pictures/tractor-background-blue.png", "pictures/tractor-background-blue-with-tractor.png"
     )
     dict_with_profession_replaced = dict.copy()
     dict_with_profession_replaced["student_profession"] = TRACTOR_PROFESSION_WORDING
     green = create_tractor_certificate(
-        dict_with_profession_replaced, students, "pictures/tractor-background-green.png"
+        dict_with_profession_replaced,
+        students,
+        "pictures/tractor-background-green.png",
+        "pictures/tractor-background-green-with-tractor.png",
     )
     return (blue, green)
 

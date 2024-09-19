@@ -18,7 +18,7 @@ class Student:
 
 def parse_machine_cat_or_role(chosen_profession, value):
     if value == '' or value == None: 
-        return ''
+        return ('', '')
     if chosen_profession.role_required: 
         return ("", value)
     return (value, "")
