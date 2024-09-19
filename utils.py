@@ -6,8 +6,21 @@ import copy
 import docx
 from docx.shared import Inches, Pt
 from docx.oxml import OxmlElement
+from dataclasses import dataclass
+import profession_parsing
 
+@dataclass
+class Student:
+    name: str
+    cert_number: int
+    role: str
 
+@dataclass
+class Profession:
+    name: str
+    code: list[int]
+    hours_str: str
+    formatted_profession: str
 
 # Russian month names mapping
 russian_months = {
@@ -30,6 +43,18 @@ def format_date(date):
     for en_month, ru_month in russian_months.items():
         formatted_date = formatted_date.replace(en_month, ru_month)
     return formatted_date
+
+def format_hours_string(hours):
+  """Правильно склоняет "в объеме Х часов/часа" в зависимости от числа часов."""
+
+  if 11 <= hours % 100 <= 14:
+    return f"{hours} часов"
+  elif hours % 10 == 1:
+    return f"{hours} часа"
+  elif 2 <= hours % 10 <= 4:
+    return f"{hours} часов"
+  else:
+    return f"{hours} часов"
 
 def display_docx_content(doc):
     """Reads a .docx file and displays paragraphs and tables in order."""
@@ -227,6 +252,7 @@ def choose_teacher(all_teachers):
         return None
 
 
+# Now it should be a dictionary from name to info 
 def choose_profession(all_professions):
     """Handles profession selection and adding new professions."""
 
@@ -239,40 +265,33 @@ def choose_profession(all_professions):
 
     if selected_item:
         st.write(f"Программа обучения: {selected_item}")
+        return all_professions[selected_item]
 
     add_new = st.checkbox("Добавить новую программу обучения?")
 
     if "new_profession" not in st.session_state:
         st.session_state.new_profession = None
+    else: 
+        st.session_state.new_profession
 
     if add_new:
-        new_profession = st.text_input("Введите название новой программы:")
-        new_code = st.text_input("Введите код:")
+        profession_name = st.text_input("Введите название новой программы:")
+        code = st.text_input("Введите код:")
+        hours = st.text_input("Введите часы, только количество")
         if st.button("Добавить программу"):
-            if new_profession:
-                code_int = -1
-                try:
-                    code_int = int(new_code)
-                    all_professions[new_profession] = [code_int]
-                except Exception as e:
-                    print("Failed to parse the profession code")
-                    all_professions[new_profession] = [-1]
+            if profession_name:
+                code_list = profession_parsing.add_code(code)
+                hrs = profession_parsing.add_hours(hours)
+                st.success(f"Программа '{profession_name}' добавлена c кодом {code_list} и часами {hrs}!")
+                
+                new_profession = Profession(profession_name, code_list, hrs, profession_parsing.format_profession_string(profession_name, code_list))
+                all_professions[profession_name] = new_profession
                 save_data(all_professions, filename="data/professions.pickle")
-                st.success(f"Программа '{new_profession}' добавлена!")
                 st.session_state.new_profession = new_profession
             else:
-                st.warning("Программа не введена.")
+                st.warning("Введите название программы")
 
     if st.session_state.new_profession:
-        code_int = all_professions[st.session_state.new_profession][0]
-        if code_int == -1:
-            return f"«{st.session_state.new_profession}»"
-        return f"{code_int} «{st.session_state.new_profession}»"
-    elif selected_item:
-        selected_profession_code = all_professions[selected_item]
-        selected_profession_code_str = ", ".join(
-            str(code) for code in selected_profession_code
-        )
-        return f"{selected_profession_code_str} «{selected_item}»"
+        return st.session_state.new_profession
     else:
         return None

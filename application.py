@@ -16,6 +16,7 @@ from docx.oxml import OxmlElement
 from docx.shared import Inches, Pt
 from docx.oxml import register_element_cls
 from docx.enum.table import WD_TABLE_ALIGNMENT
+from dataclasses import dataclass
 
 NAME_KEY = "student_name"
 CERTIFICATE_KEY = "certificate_number"
@@ -422,13 +423,18 @@ replacement_dict = {
     "beginning_number": beginning_number,
     "end_date": formatted_end_date,
     "end_number": end_number,
-    "student_profession": student_profession,
     "student_company": company,
     "teacher_name": teacher_name,
     "num_students": num_students,
     "class": "4",
-    "year": beginning_date.year,
+    "year": beginning_date.year
 }
+if student_profession: 
+    if student_profession.hours_str:
+        replacement_dict['hours'] = student_profession.hours_str
+    if student_profession.formatted_profession: 
+        replacement_dict['student_profession'] = student_profession.formatted_profession
+
 beginning_doc = create_beginning_document(replacement_dict, student_data)
 end_doc = create_end_doc(replacement_dict, student_data)
 protocol = create_protocol_doc(replacement_dict, student_data)

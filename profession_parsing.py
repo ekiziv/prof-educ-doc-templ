@@ -1,6 +1,45 @@
 from docx import Document
 import streamlit as st
 import pickle
+import utils 
+
+
+def format_profession_string(profession_name, codes):
+    if len(codes) > 0:
+        code_str = ", ".join(
+            str(code) for code in codes
+        )
+        return f"{code_str} «{profession_name}»"
+    return f"«{profession_name}»"
+
+# return a list of ints representing the applicable codes 
+def add_code(code_str): 
+    code_list = []
+    if code_str == None: 
+        return code_list
+    
+    try:
+        code_list.append(int(code_str))
+    except ValueError:
+        if code_str == "-":
+            return code_list
+        else:
+            # Handle cases with multiple codes (assuming comma-separated)
+            codes = [int(c.strip()) for c in code_str.split(",") if c.strip()]
+            for code in codes: 
+                code_list.append(code)
+    return code_list
+
+def add_hours(hours_str): 
+    if hours_str == None: 
+        return None
+    
+    try:
+        hours_int = int(hours_str)
+        return utils.format_hours_string(hours_int)
+    except ValueError:
+        print('Failed to parse hours')
+        return None
 
 def professions_docx_table_to_df(docx_path='/Users/ekiziv/Desktop/mama/work/data/all_professions_cleaned.docx'):
     """Loads a table from a .docx file into a dictionary and saves to pickle. 
@@ -23,35 +62,33 @@ def professions_docx_table_to_df(docx_path='/Users/ekiziv/Desktop/mama/work/data
 
         if not profession:  # Skip empty rows
             continue
+        
+        code_list = add_code(code)
+        
+        # No hours specified for professions from this list.
+        new_profession = utils.Profession(profession, code_list, None, format_profession_string(profession, code_list))
+        professions[profession] = new_profession
 
-        try:
-            code = int(code)  # Try converting to an integer
+    return professions
 
-        except ValueError:
-            if code == "-":
-                code = None  # Or use your preferred default for missing codes
-            else:
-                # Handle cases with multiple codes (assuming comma-separated)
-                
-                codes = [int(c.strip()) for c in code.split(",") if c.strip()]
-                if codes:
-                    professions.setdefault(profession, []).extend(codes)
-                continue  # Go to the next row after handling multiple codes
+def professions_labour_protection(docx_path='/Users/ekiziv/Desktop/mama/work/data/milana_professions.docx'):
+    doc = Document(docx_path)
+    table = doc.tables[0]
+    professions = {}
 
-        # Add the code (single or from multiple codes handling)
-        professions.setdefault(profession, []).append(code)
+    for row in table.rows:
+        row_data = [cell.text.strip() for cell in row.cells]
+        profession = row_data[0]
+        hours = row_data[1]
 
-    # Remove duplicate codes for each profession (if any)
-    for key in professions:
-        professions[key] = list(set(professions[key]))
+        if not profession or not hours:  # Skip rows with either no profession or hours
+            continue
 
-    # sort dictionary by key
-    professions = dict(sorted(professions.items()))
-
-    st.write(professions)
-
-    with open("data/professions.pickle", "wb") as f:
-        pickle.dump(professions, f)
+        hrs = add_hours(hours)
+        
+        code_list = []
+        new_profession = utils.Profession(profession, code_list, hrs, format_profession_string(profession, code_list))
+        professions[profession] = new_profession
 
     return professions
 
@@ -64,5 +101,13 @@ def teachers_to_pickle():
         pickle.dump(teachers, f)
 
 if __name__ == "__main__":
-    professions_docx_table_to_df()
+    professions = professions_docx_table_to_df()
+    hourly_professions = professions_labour_protection()
+    professions.update(hourly_professions)
+    professions = dict(sorted(professions.items()))
+    st.write(professions)
+
+    with open("data/professions.pickle", "wb") as f:
+        pickle.dump(professions, f)
+
     teachers_to_pickle()
