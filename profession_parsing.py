@@ -66,7 +66,7 @@ def professions_docx_table_to_df(docx_path='/Users/ekiziv/Desktop/mama/work/data
         code_list = add_code(code)
         
         # No hours specified for professions from this list.
-        new_profession = utils.Profession(profession, code_list, None, format_profession_string(profession, code_list))
+        new_profession = utils.Profession(name=profession, code=code_list, hours_str=None, formatted_profession=format_profession_string(profession, code_list), role_required=False)
         professions[profession] = new_profession
 
     return professions
@@ -87,7 +87,7 @@ def professions_labour_protection(docx_path='/Users/ekiziv/Desktop/mama/work/dat
         hrs = add_hours(hours)
         
         code_list = []
-        new_profession = utils.Profession(profession, code_list, hrs, format_profession_string(profession, code_list))
+        new_profession = utils.Profession(name=profession, code=code_list, hours_str=hrs, formatted_profession=format_profession_string(profession, code_list), role_required=True)
         professions[profession] = new_profession
 
     return professions

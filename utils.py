@@ -14,6 +14,15 @@ class Student:
     name: str
     cert_number: int
     role: str
+    machine_category: str
+
+def parse_machine_cat_or_role(chosen_profession, value):
+    if value == '' or value == None: 
+        return ''
+    if chosen_profession.role_required: 
+        return ("", value)
+    return (value, "")
+
 
 @dataclass
 class Profession:
@@ -21,6 +30,7 @@ class Profession:
     code: list[int]
     hours_str: str
     formatted_profession: str
+    role_required: bool
 
 # Russian month names mapping
 russian_months = {
@@ -278,13 +288,14 @@ def choose_profession(all_professions):
         profession_name = st.text_input("Введите название новой программы:")
         code = st.text_input("Введите код:")
         hours = st.text_input("Введите часы, только количество")
+        role_required = st.checkbox("Должность необходима?")
         if st.button("Добавить программу"):
             if profession_name:
                 code_list = profession_parsing.add_code(code)
                 hrs = profession_parsing.add_hours(hours)
                 st.success(f"Программа '{profession_name}' добавлена c кодом {code_list} и часами {hrs}!")
                 
-                new_profession = Profession(profession_name, code_list, hrs, profession_parsing.format_profession_string(profession_name, code_list))
+                new_profession = Profession(name=profession_name, code=code_list, hours_str=hrs, formatted_profession=profession_parsing.format_profession_string(profession_name, code_list), role_required=role_required)
                 all_professions[profession_name] = new_profession
                 save_data(all_professions, filename="data/professions.pickle")
                 st.session_state.new_profession = new_profession
