@@ -274,6 +274,8 @@ def create_tractor_certificate(replacement_dict, students, picture_front, pictur
     utils.set_default_font(merged_doc)
 
     merged_table = merged_doc.add_table(rows=len(students), cols=2)
+    if len(students) == 1: 
+        merged_doc.add_page_break()
     merged_tractor_table = merged_doc.add_table(rows=len(students), cols=2)
 
     curr_index = 0
@@ -286,6 +288,7 @@ def create_tractor_certificate(replacement_dict, students, picture_front, pictur
         add_student_content_to_merged_table(
             merged_table, doc.tables[0], student_index, curr_index, picture_front, picture_height=TRACTOR_CERT_HEIGHT, picture_width=TRACTOR_CERT_WIDTH
         )
+
         add_student_content_to_merged_table(
             merged_tractor_table, doc.tables[1], student_index, curr_index, picture_back, picture_height=TRACTOR_CERT_HEIGHT, picture_width=TRACTOR_CERT_WIDTH
         )
