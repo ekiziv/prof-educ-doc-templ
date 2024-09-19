@@ -75,6 +75,7 @@ def preserve_formatting(new_run, source_run):
     new_run.font.bold = source_run.font.bold
     new_run.font.italic = source_run.font.italic
     new_run.font.underline = source_run.font.underline
+    new_run.font.color.rgb = source_run.font.color.rgb
     return new_run
 
 # https://github.com/python-openxml/python-docx/issues/205
@@ -119,7 +120,6 @@ def copy_table_element(source_tbl, target_tbl, element_name):
         if target_element is not None:
             target_tbl.remove(target_element)
         target_tbl.insert(0, copy.deepcopy(source_element)) 
-
 
 def update_nested_table_styles(source_cell, source_row_element):
     """Updates line spacing after to 0 for all paragraphs in a nested table."""

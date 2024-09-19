@@ -2,6 +2,7 @@ import utils
 import picture
 
 import docx
+import math
 import streamlit as st
 import datetime
 from docxtpl import DocxTemplate
@@ -14,6 +15,7 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.shared import Inches, Pt
 from docx.oxml import register_element_cls
+from docx.enum.table import WD_TABLE_ALIGNMENT
 
 NAME_KEY = "student_name"
 CERTIFICATE_KEY = "certificate_number"
@@ -61,6 +63,92 @@ def create_confirmation_page(replacement_dict, students, picture_path):
 
     return merged_doc
 
+def copy_text_and_formatting(source_cell, target_cell):
+    utils.copy_cell_properties(source_cell, target_cell)
+
+    for p_i, paragraph in enumerate(source_cell.paragraphs):
+        if paragraph.text.strip() == "": 
+            continue
+        if p_i == 0: 
+            new_paragraph = target_cell.paragraphs[0]  # Use the existing empty paragraph
+        else:
+            new_paragraph = target_cell.add_paragraph()
+        new_paragraph.paragraph_format.space_before = Pt(0)
+        new_paragraph.paragraph_format.space_after = Pt(0)
+        new_paragraph.alignment = paragraph.alignment
+        new_paragraph.paragraph_format.left_indent = paragraph.paragraph_format.left_indent
+
+        for run in paragraph.runs:
+            new_run = new_paragraph.add_run(run.text)
+            if "prof_educ_logo" in run.text:
+                new_run.text = new_run.text.replace("prof_educ_logo", "") 
+                new_run.add_picture('pictures/professional-education-logo.png')
+                continue
+            utils.preserve_formatting(new_run, run) 
+
+def maybe_add_nested_table(cell, target_cell): 
+    if len(cell.tables) > 0: 
+        # for now just copy the first one
+        # Set "Spacing After" for the last paragraph to 0
+        last_paragraph = target_cell.paragraphs[-1]
+        last_paragraph.paragraph_format.space_after = Pt(0) 
+        
+        nested_table = cell.tables[0] 
+        new_table = target_cell.add_table(rows=len(nested_table.rows), cols=len(nested_table.columns))
+        new_table.alignment = WD_TABLE_ALIGNMENT.CENTER 
+        for r_i, rw in enumerate(nested_table.rows):
+            for c_i, cll in enumerate(rw.cells):
+                copy_text_and_formatting(cll, new_table.cell(r_i, c_i))
+
+def add_table(merged_table, curr_row, curr_col, table): 
+    for row_index, row in enumerate(table.rows):
+        merged_table.rows[curr_row].height = Inches(2.76)
+        for col_index, cell in enumerate(row.cells):
+            target_cell = merged_table.cell(curr_row, curr_col)
+            target_cell.width = Inches(3.84)
+            # add tables too! 
+            copy_text_and_formatting(cell, target_cell)
+            maybe_add_nested_table(cell, target_cell)
+            
+
+def create_certificate_for_labour_protection(replacement_dict, students):
+    if not students:
+        return Document()
+
+    merged_doc = Document()
+    merged_doc = utils.fit_more_rows(merged_doc)
+    utils.set_default_font(merged_doc)
+
+    num_rows = math.ceil(len(students) / 2)
+
+    merged_table_front = merged_doc.add_table(rows=num_rows, cols=2)
+    merged_table_back = merged_doc.add_table(rows=num_rows, cols=2)
+
+
+    curr_row = 0
+    curr_col = 0 
+    for student_index, student in enumerate(students):
+        local_dict = replacement_dict.copy()
+        local_dict[NAME_KEY] = student[NAME_KEY]
+        local_dict[CERTIFICATE_KEY] = student[CERTIFICATE_KEY]
+        local_dict[MACHINE_CATEGORY] = student[MACHINE_CATEGORY]
+
+        doc = DocxTemplate("templates/labour_protection.docx")
+        doc.render(local_dict)
+
+        # Copy content from the template document to the target cell
+        
+        add_table(merged_table_front, curr_row, curr_col, doc.tables[0])
+        add_table(merged_table_back, curr_row, curr_col, doc.tables[1])
+           
+        # Update cell indices for the next student
+        curr_col += 1 
+        if curr_col == 2:  
+            curr_col = 0
+            curr_row += 1 
+    xml = etree.tostring(merged_table_front._tbl, encoding='unicode', pretty_print=True)
+    utils.dump(xml, 'table')
+    return merged_doc
 
 def create_certificate(replacement_dict, students):
     if not students:
@@ -104,7 +192,10 @@ def create_certificate(replacement_dict, students):
 
         # Add paragraphs and runs to the new cell, copying formatting
         for p_i, paragraph in enumerate(paragraphs):
-            new_paragraph = target_cell.add_paragraph("")
+            if p_i == 0: 
+                new_paragraph = target_cell.paragraphs[0]
+            else: 
+                new_paragraph = target_cell.add_paragraph()
             source_paragraph = source_cell.paragraphs[p_i]
             if p_i == 0:
                 picture.add_float_picture(
@@ -346,7 +437,7 @@ certificate_docs = create_certificate(replacement_dict, student_data)
     replacement_dict, student_data
 )
 milana_conf_page = create_confirmation_page(replacement_dict, student_data, 'pictures/tractor-background-green.png')
-milana_cert = None
+milana_cert = create_certificate_for_labour_protection(replacement_dict, student_data)
 
 show_documents = st.button("Сгенерировать документы")
 
@@ -406,7 +497,7 @@ if show_documents:
         with document_tabs[6]: 
             utils.display_docx_content(milana_conf_page)
         with document_tabs[7]: 
-            st.write('To be done')
+            utils.display_docx_content(milana_cert)
 
 # --- Create a ZIP archive in memory ---
 zip_buffer = BytesIO()
@@ -432,6 +523,8 @@ with zipfile.ZipFile(zip_buffer, "w") as zipf:
         green_tractor_cert.save(f)
     with zipf.open("Удостоверение Милана.docx", "w") as f:
         milana_conf_page.save(f)
+    with zipf.open("Свидетельство Милана.docx", "w") as f:
+        milana_cert.save(f)
 
 zip_buffer.seek(0)
 
