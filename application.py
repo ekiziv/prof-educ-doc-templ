@@ -369,6 +369,30 @@ def create_protocol_doc(replacement_dict, students):
     return doc
 
 
+def create_labour_protection_protocol(replacement_dict, students):
+    """Creates a Word document with the provided information."""
+
+    doc = DocxTemplate("templates/protocol_milana.docx")
+    doc.render(replacement_dict)
+    utils.set_default_font(doc)
+    table = doc.tables[0]
+
+    for index, student in enumerate(students):
+        # Create a new row
+        new_row = table.add_row()
+
+        # Populate cells in the new row
+        new_row.cells[0].text = str(index + 1)
+        new_row.cells[1].text = student.name
+        new_row.cells[2].text = student.role
+        new_row.cells[3].text = replacement_dict["student_company"]
+        new_row.cells[4].text = ''
+        new_row.cells[5].text = replacement_dict['end_date']
+        new_row.cells[6].text = str(student.cert_number)
+
+    return doc
+
+
 st.title("Профессиональное обучение")
 
 # Input 1: Text Input
@@ -434,6 +458,9 @@ certificate_docs = create_certificate(replacement_dict, student_data)
 )
 milana_conf_page = create_confirmation_page(replacement_dict, student_data, 'pictures/tractor-background-green.png')
 milana_cert = create_certificate_for_labour_protection(replacement_dict, student_data)
+labour_protection_protocol = create_labour_protection_protocol(
+    replacement_dict, student_data
+)
 
 show_documents = st.button("Сгенерировать документы")
 
@@ -471,6 +498,7 @@ if show_documents:
                 "Свидетельство тракторов зеленое",
                 "Милана удостоверение", 
                 "Милана св-во охрана труда",
+                'Милана протокол охрана труда',
             ]
         )
         with document_tabs[0]:  # Приказ о начале
@@ -494,6 +522,8 @@ if show_documents:
             utils.display_docx_content(milana_conf_page)
         with document_tabs[7]: 
             utils.display_docx_content(milana_cert)
+        with document_tabs[8]: 
+            utils.display_docx_content(labour_protection_protocol)
 
 # --- Create a ZIP archive in memory ---
 zip_buffer = BytesIO()
@@ -521,6 +551,8 @@ with zipfile.ZipFile(zip_buffer, "w") as zipf:
         milana_conf_page.save(f)
     with zipf.open("Свидетельство Милана.docx", "w") as f:
         milana_cert.save(f)
+    with zipf.open('Протокол Милана.docx', 'w') as f:
+        labour_protection_protocol.save(f)
 
 zip_buffer.seek(0)
 
