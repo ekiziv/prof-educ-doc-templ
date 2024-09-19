@@ -131,6 +131,7 @@ def create_certificate_for_labour_protection(replacement_dict, students):
     num_rows = math.ceil(len(students) / 2)
 
     merged_table_front = merged_doc.add_table(rows=num_rows, cols=2)
+    merged_doc.add_page_break()
     merged_table_back = merged_doc.add_table(rows=num_rows, cols=2)
 
     curr_row = 0
@@ -274,8 +275,7 @@ def create_tractor_certificate(replacement_dict, students, picture_front, pictur
     utils.set_default_font(merged_doc)
 
     merged_table = merged_doc.add_table(rows=len(students), cols=2)
-    if len(students) == 1: 
-        merged_doc.add_page_break()
+    merged_doc.add_page_break()
     merged_tractor_table = merged_doc.add_table(rows=len(students), cols=2)
 
     curr_index = 0
