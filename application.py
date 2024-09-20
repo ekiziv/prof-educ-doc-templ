@@ -350,7 +350,7 @@ def create_end_doc(replacement_dict, students):
         new_row.cells[0].text = str(index + 1)
         new_row.cells[1].text = student.name
         new_row.cells[2].text = replacement_dict["student_company"]
-        new_row.cells[3].text = str(student.cert_number)
+        new_row.cells[3].text = student.cert_number
 
     return doc
 
@@ -371,7 +371,7 @@ def create_protocol_doc(replacement_dict, students):
         new_row.cells[0].text = str(index + 1)
         new_row.cells[1].text = student.name
         new_row.cells[2].text = replacement_dict["student_company"]
-        new_row.cells[3].text = str(student.cert_number)
+        new_row.cells[3].text = student.cert_number
 
     return doc
 
@@ -395,7 +395,7 @@ def create_labour_protection_protocol(replacement_dict, students):
         new_row.cells[3].text = replacement_dict["student_company"]
         new_row.cells[4].text = ''
         new_row.cells[5].text = replacement_dict['end_date']
-        new_row.cells[6].text = str(student.cert_number)
+        new_row.cells[6].text = student.cert_number
 
     return doc
 
@@ -432,8 +432,9 @@ for line in student_names:
             items  # Split each line by tab
         )
         (machine_category, role) = utils.parse_machine_cat_or_role(student_profession, category[0] if category else "")
+        cert_number = utils.get_cert_number(certificate_number)
         student_data.append(
-            utils.Student(name=name, cert_number=int(float(certificate_number)), machine_category=machine_category, role=role)
+            utils.Student(name=name, cert_number=cert_number, machine_category=machine_category, role=role)
         )
 num_students = len(student_data)
 

@@ -12,7 +12,7 @@ import profession_parsing
 @dataclass
 class Student:
     name: str
-    cert_number: int
+    cert_number: str
     role: str
     machine_category: str
 
@@ -22,6 +22,13 @@ def parse_machine_cat_or_role(chosen_profession, value):
     if chosen_profession.role_required: 
         return ("", value)
     return (value, "")
+
+def get_cert_number(cert_number): 
+    try: 
+        return str(int(float(cert_number)))
+    except Exception as e: 
+        print(e)
+        return cert_number
 
 
 @dataclass
