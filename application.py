@@ -1,4 +1,5 @@
 import utils
+from utils import Profession
 import picture
 import profession_parsing
 
