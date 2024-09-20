@@ -395,7 +395,6 @@ def create_labour_protection_protocol(replacement_dict, students):
         new_row.cells[3].text = replacement_dict["student_company"]
         new_row.cells[4].text = ''
         new_row.cells[5].text = replacement_dict['end_date']
-        new_row.cells[6].text = student.cert_number
 
     return doc
 
