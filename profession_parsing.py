@@ -12,7 +12,7 @@ def format_profession_string(profession_name, codes):
         return f"{code_str} «{profession_name}»"
     return f"«{profession_name}»"
 
-# return a list of ints representing the applicable codes 
+# return a list of ints representing the applicable codes
 def add_code(code_str): 
     code_list = []
     if code_str == None: 
@@ -93,10 +93,16 @@ def professions_labour_protection(docx_path='/Users/ekiziv/Desktop/mama/work/dat
     return professions
 
 def teachers_to_pickle():
-    teachers = ["А.И. Мамонтов", 
-                "А.В. Перекрестов", 
-                "Н.В. Клюшина",
-                "Л.А. Лапчук"]
+    teachers = [
+        "А.И. Мамонтов",
+        "А.В. Перекрестов",
+        "Н.В. Клюшина",
+        "Л.А. Лапчук",
+        "О.В. Рюмкина",
+        "Н.А. Гричихина",
+        "К.Н. Константинов",
+        "М.Г. Ерeмина",
+    ]
     with open("data/teachers.pickle", "wb") as f:
         pickle.dump(teachers, f)
 

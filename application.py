@@ -19,6 +19,7 @@ from docx.shared import Inches, Pt
 from docx.oxml import register_element_cls
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from dataclasses import dataclass
+from dateutil.relativedelta import relativedelta
 
 NAME_KEY = "student_name"
 CERTIFICATE_KEY = "certificate_number"
@@ -219,7 +220,7 @@ def create_certificate(replacement_dict, students):
 
 
 def add_student_content_to_merged_table(
-    merged_table, tbl, student_index, curr_index, picture_path, picture_height=None, picture_width=None
+    merged_table, tbl, student_index, curr_index, picture_path=None, picture_height=None, picture_width=None
 ):
     if student_index == 0:
         for element_name in ["w:tblGrid", "w:tblPr"]:
@@ -257,14 +258,15 @@ def add_student_content_to_merged_table(
         first_cell = merged_table.rows[curr_index].cells[0]
         curr_index += 1
         p = first_cell.add_paragraph()
-        picture.add_float_picture(
-            p,
-            picture_path,
-            height=picture_height,
-            width=picture_width,
-            pos_x=Pt(0),
-            pos_y=Pt(0),
-        )
+        if picture_path: 
+            picture.add_float_picture(
+                p,
+                picture_path,
+                height=picture_height,
+                width=picture_width,
+                pos_x=Pt(0),
+                pos_y=Pt(0),
+            )
 
 
 def create_tractor_certificate(replacement_dict, students, picture_front, picture_back):
@@ -292,6 +294,34 @@ def create_tractor_certificate(replacement_dict, students, picture_front, pictur
 
         add_student_content_to_merged_table(
             merged_tractor_table, doc.tables[1], student_index, curr_index, picture_back, picture_height=TRACTOR_CERT_HEIGHT, picture_width=TRACTOR_CERT_WIDTH
+        )
+        curr_index += 1
+
+    return merged_doc
+
+
+def create_height_certificate(replacement_dict, students):
+    if not students:
+        return Document()
+
+    merged_doc = Document()
+    merged_doc = utils.fit_more_rows(merged_doc)
+    utils.set_default_font(merged_doc)
+
+    merged_table = merged_doc.add_table(rows=len(students), cols=3)
+
+    curr_index = 0
+    for student_index, student in enumerate(students):
+        local_dict = make_student_copy(replacement_dict, student)
+
+        doc = DocxTemplate("templates/height_certificate.docx")
+        doc.render(local_dict)
+
+        add_student_content_to_merged_table(
+            merged_table,
+            doc.tables[0],
+            student_index,
+            curr_index
         )
         curr_index += 1
 
@@ -439,6 +469,7 @@ num_students = len(student_data)
 
 formatted_beginning_date = utils.format_date(beginning_date)
 formatted_end_date = utils.format_date(end_date)
+expiration_date = utils.format_date((end_date + relativedelta(years=3)))
 replacement_dict = {
     "beginning_date": formatted_beginning_date,
     "beginning_number": beginning_number,
@@ -448,7 +479,8 @@ replacement_dict = {
     "teacher_name": teacher_name,
     "num_students": num_students,
     "class": "4",
-    "year": beginning_date.year
+    "year": beginning_date.year,
+    "expiration_date": expiration_date,
 }
 if student_profession: 
     if student_profession.hours_str:
@@ -468,6 +500,7 @@ milana_cert = create_certificate_for_labour_protection(replacement_dict, student
 labour_protection_protocol = create_labour_protection_protocol(
     replacement_dict, student_data
 )
+height_certificate = create_height_certificate(replacement_dict, student_data)
 
 show_documents = st.button("Сгенерировать документы")
 
@@ -506,6 +539,7 @@ if show_documents:
                 "Милана удостоверение", 
                 "Милана св-во охрана труда",
                 'Милана протокол охрана труда',
+                'На высоте',
             ]
         )
         with document_tabs[0]:  # Приказ о начале
@@ -531,6 +565,8 @@ if show_documents:
             utils.display_docx_content(milana_cert)
         with document_tabs[8]: 
             utils.display_docx_content(labour_protection_protocol)
+        with document_tabs[9]: 
+            utils.display_docx_content(height_certificate)
 
 # --- Create a ZIP archive in memory ---
 zip_buffer = BytesIO()
@@ -560,6 +596,8 @@ with zipfile.ZipFile(zip_buffer, "w") as zipf:
         milana_cert.save(f)
     with zipf.open('Протокол Милана.docx', 'w') as f:
         labour_protection_protocol.save(f)
+    with zipf.open('На высоте.docx', 'w') as f:
+        height_certificate.save(f)
 
 zip_buffer.seek(0)
 
