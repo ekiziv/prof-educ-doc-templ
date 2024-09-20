@@ -133,6 +133,7 @@ def create_certificate_for_labour_protection(replacement_dict, students):
     num_rows = math.ceil(len(students) / 2)
 
     merged_table_front = merged_doc.add_table(rows=num_rows, cols=2)
+    merged_table_front.style = "TableGrid"
     merged_doc.add_page_break()
     merged_table_back = merged_doc.add_table(rows=num_rows, cols=2)
 
