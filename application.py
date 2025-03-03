@@ -480,7 +480,7 @@ replacement_dict = {
     "teacher_name": teacher_name,
     "num_students": num_students,
     "class": "4",
-    "year": beginning_date.year,
+    "year": end_date.year,
     "expiration_date": expiration_date,
 }
 if student_profession: 
