@@ -21,15 +21,16 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from dataclasses import dataclass
 from dateutil.relativedelta import relativedelta
 
+# --- Constants and Setup ---
 NAME_KEY = "student_name"
 CERTIFICATE_KEY = "certificate_number"
 MACHINE_CATEGORY = "machine_category"
-ROLE = 'student_role'
+ROLE = "student_role"
 
 TRACTOR_PROFESSION_WORDING = "19203 «Тракторист»"
 
-CERT_HEIGHT_INCHES = Inches(3.65)
-CERT_WIDTH_INCHES = Inches(5.6)
+CERT_HEIGHT_INCHES = Inches(3.74)
+CERT_WIDTH_INCHES = Inches(5.59)
 
 TRACTOR_CERT_HEIGHT = Inches(5.63)
 TRACTOR_CERT_WIDTH = Inches(8.04)
@@ -38,6 +39,7 @@ register_element_cls("wp:anchor", picture.CT_Anchor)
 
 
 def make_student_copy(replacement_dict, student):
+    """Creates a copy of the replacement dict with student-specific data."""
     local_dict = replacement_dict.copy()
     local_dict[NAME_KEY] = student.name
     local_dict[CERTIFICATE_KEY] = student.cert_number
@@ -46,393 +48,354 @@ def make_student_copy(replacement_dict, student):
     return local_dict
 
 
-def create_confirmation_page(replacement_dict, students, picture_path):
-    if not students:
-        return Document()
+class DocumentGenerator:
+    """
+    A factory class to generate various Word documents based on templates and student data.
+    This class abstracts away the repetitive logic of document creation.
+    """
 
-    merged_doc = Document()
-    merged_doc = utils.fit_more_rows(merged_doc)
-    utils.set_default_font(merged_doc)
+    def __init__(self, replacement_dict, students):
+        self.replacement_dict = replacement_dict
+        self.students = students if students else []
 
-    merged_table = merged_doc.add_table(rows=len(students), cols=2)
-    merged_tractor_table = merged_doc.add_table(rows=len(students), cols=2)
+    # --- Private Helper Methods for Document Generation ---
 
-    curr_index = 0
-    for student_index, student in enumerate(students):
-        local_dict = make_student_copy(replacement_dict, student)
+    def _create_list_based_document(self, template_path, row_populator_func):
+        """
+        Generic generator for documents with a table populated by a list of students.
+        This pattern is used for orders (beginning/end) and protocols.
 
-        doc = DocxTemplate("templates/milana_conf_page.docx")
-        doc.render(local_dict)
+        Args:
+            template_path (str): The path to the .docx template.
+            row_populator_func (function): A function that takes (row, student, index, data)
+                                           and populates the cells of a new row.
+        """
+        doc = DocxTemplate(template_path)
+        doc.render(self.replacement_dict)
+        utils.set_default_font(doc)
 
-        add_student_content_to_merged_table(
-            merged_table, doc.tables[0], student_index, curr_index, picture_path, picture_height=Inches(5.54), picture_width=Inches(7.85)
-        )
-        add_student_content_to_merged_table(
-            merged_tractor_table, doc.tables[1], student_index, curr_index, picture_path, picture_height=Inches(5.54), picture_width=Inches(7.85)
-        ) 
-        curr_index += 1
+        if not self.students:
+            return doc
 
-    return merged_doc
+        table = doc.tables[0]
+        for index, student in enumerate(self.students):
+            new_row = table.add_row()
+            row_populator_func(new_row, student, index, self.replacement_dict)
+        return doc
 
-def copy_text_and_formatting(source_cell, target_cell):
-    utils.copy_cell_properties(source_cell, target_cell)
+    def _create_merged_doc_from_template_rows(self, template_path, table_configs):
+        """
+        Generic generator for certificates created by merging rows from a template.
+        Each student gets one row in the final document, built from a rendered template.
+        This pattern is used for tractor, height, and confirmation page certificates.
 
-    for p_i, paragraph in enumerate(source_cell.paragraphs):
-        if paragraph.text.strip() == "": 
-            continue
-        if p_i == 0: 
-            new_paragraph = target_cell.paragraphs[0]  # Use the existing empty paragraph
-        else:
-            new_paragraph = target_cell.add_paragraph()
-        new_paragraph.paragraph_format.space_before = Pt(0)
-        new_paragraph.paragraph_format.space_after = Pt(0)
-        new_paragraph.alignment = paragraph.alignment
-        new_paragraph.paragraph_format.left_indent = paragraph.paragraph_format.left_indent
+        Args:
+            template_path (str): The path to the .docx template.
+            table_configs (list): A list of dictionaries, where each dict configures one
+                                  table to be processed from the template (e.g., picture details).
+        """
+        if not self.students:
+            return Document()
 
-        for run in paragraph.runs:
-            new_run = new_paragraph.add_run(run.text)
-            if "prof_educ_logo" in run.text:
-                new_run.text = new_run.text.replace("prof_educ_logo", "") 
-                new_run.add_picture('pictures/professional-education-logo.png')
-                continue
-            utils.preserve_formatting(new_run, run) 
+        merged_doc = Document()
+        merged_doc = utils.fit_more_rows(merged_doc)
+        utils.set_default_font(merged_doc)
 
-def maybe_add_nested_table(cell, target_cell): 
-    if len(cell.tables) > 0: 
-        # for now just copy the first one
-        # Set "Spacing After" for the last paragraph to 0
-        last_paragraph = target_cell.paragraphs[-1]
-        last_paragraph.paragraph_format.space_after = Pt(0) 
-        
-        nested_table = cell.tables[0] 
-        new_table = target_cell.add_table(rows=len(nested_table.rows), cols=len(nested_table.columns))
-        new_table.alignment = WD_TABLE_ALIGNMENT.CENTER 
-        for r_i, rw in enumerate(nested_table.rows):
-            for c_i, cll in enumerate(rw.cells):
-                copy_text_and_formatting(cll, new_table.cell(r_i, c_i))
+        merged_tables = []
+        for i, config in enumerate(table_configs):
+            num_cols = config.get("cols", 1)
+            merged_tables.append(
+                merged_doc.add_table(rows=len(self.students), cols=num_cols)
+            )
+            if i > 0:
+                merged_doc.add_page_break()
 
-def add_table(merged_table, curr_row, curr_col, table): 
-    for row_index, row in enumerate(table.rows):
-        merged_table.rows[curr_row].height = Inches(2.76)
-        for col_index, cell in enumerate(row.cells):
-            target_cell = merged_table.cell(curr_row, curr_col)
-            target_cell.width = Inches(3.84)
-            # add tables too! 
-            copy_text_and_formatting(cell, target_cell)
-            maybe_add_nested_table(cell, target_cell)
+        for student_index, student in enumerate(self.students):
+            local_dict = make_student_copy(self.replacement_dict, student)
+            template_doc = DocxTemplate(template_path)
+            template_doc.render(local_dict)
 
+            for i, config in enumerate(table_configs):
+                self._add_student_content_to_merged_table(
+                    merged_table=merged_tables[i],
+                    source_table=template_doc.tables[i],
+                    student_index=student_index,
+                    target_row_index=student_index,
+                    picture_path=config.get("picture_path"),
+                    picture_height=config.get("picture_height"),
+                    picture_width=config.get("picture_width"),
+                )
+        return merged_doc
 
-def create_certificate_for_labour_protection(replacement_dict, students):
-    if not students:
-        return Document()
+    # --- Private Helper Methods for Content Copying (Moved from global scope) ---
 
-    merged_doc = Document()
-    merged_doc = utils.fit_more_rows(merged_doc)
-    utils.set_default_font(merged_doc)
-
-    num_rows = math.ceil(len(students) / 2)
-
-    merged_table_front = merged_doc.add_table(rows=num_rows, cols=2)
-    merged_table_front.style = "TableGrid"
-    merged_doc.add_page_break()
-    merged_table_back = merged_doc.add_table(rows=num_rows, cols=2)
-
-    curr_row = 0
-    curr_col = 0 
-    for student_index, student in enumerate(students):
-        local_dict = make_student_copy(replacement_dict, student)
-
-        doc = DocxTemplate("templates/labour_protection.docx")
-        doc.render(local_dict)
-
-        # Copy content from the template document to the target cell
-
-        add_table(merged_table_front, curr_row, curr_col, doc.tables[0])
-        add_table(merged_table_back, curr_row, curr_col, doc.tables[1])
-
-        # Update cell indices for the next student
-        curr_col += 1 
-        if curr_col == 2:  
-            curr_col = 0
-            curr_row += 1 
-    return merged_doc
-
-def create_certificate(replacement_dict, students):
-    if not students:
-        return Document()
-
-    all_paragraphs = []
-    for student in students[1:]:
-        local_dict = make_student_copy(replacement_dict, student)
-
-        doc = DocxTemplate("templates/свидетельство.docx")
-        doc.render(local_dict)
-
-        paragraphs = doc.tables[0].cell(0, 0).paragraphs
-        all_paragraphs.append(paragraphs)
-
-    # Create final document using the first student's data as a base
-    final_doc = DocxTemplate("templates/свидетельство.docx")
-    local_dict = replacement_dict.copy()
-    local_dict[NAME_KEY] = students[0].name
-    local_dict[CERTIFICATE_KEY] = students[0].cert_number
-    final_doc.render(local_dict)
-
-    # Set default font style
-    utils.set_default_font(final_doc, bold=True)
-
-    # Get the table and add rows for each additional student
-    table = final_doc.tables[0]
-    for paragraphs in all_paragraphs:
-        row = table.add_row()
-        # this ensure that the rows are not split between pages https://github.com/python-openxml/python-docx/issues/245
-        trPr = row._tr.get_or_add_trPr()
-        trPr.append(OxmlElement("w:cantSplit"))
-
-        target_cell = row.cells[0]
-        source_cell = table.cell(0, 0)  # Use the first cell as a template
-
-        # Copy cell properties from the template cell
+    def _copy_text_and_formatting(self, source_cell, target_cell):
         utils.copy_cell_properties(source_cell, target_cell)
+        for p_i, paragraph in enumerate(source_cell.paragraphs):
+            if paragraph.text.strip() == "":
+                continue
+            new_paragraph = (
+                target_cell.paragraphs[0] if p_i == 0 else target_cell.add_paragraph()
+            )
+            new_paragraph.paragraph_format.space_before = Pt(0)
+            new_paragraph.paragraph_format.space_after = Pt(0)
+            new_paragraph.alignment = paragraph.alignment
+            new_paragraph.paragraph_format.left_indent = (
+                paragraph.paragraph_format.left_indent
+            )
+            for run in paragraph.runs:
+                new_run = new_paragraph.add_run(run.text)
+                if "prof_educ_logo" in run.text:
+                    new_run.text = new_run.text.replace("prof_educ_logo", "")
+                    new_run.add_picture("pictures/professional-education-logo.png")
+                    continue
+                utils.preserve_formatting(new_run, run)
 
-        # Add paragraphs and runs to the new cell, copying formatting
-        for p_i, paragraph in enumerate(paragraphs):
-            if p_i == 0: 
-                new_paragraph = target_cell.paragraphs[0]
-            else: 
-                new_paragraph = target_cell.add_paragraph()
-            source_paragraph = source_cell.paragraphs[p_i]
-            if p_i == 0:
-                picture.add_float_picture(
-                    new_paragraph,
-                    "pictures/basic-cert-background.png",
-                    width=CERT_WIDTH_INCHES,
-                    height=CERT_HEIGHT_INCHES,
+    def _maybe_add_nested_table(self, cell, target_cell):
+        if len(cell.tables) > 0:
+            last_paragraph = target_cell.paragraphs[-1]
+            last_paragraph.paragraph_format.space_after = Pt(0)
+            nested_table = cell.tables[0]
+            new_table = target_cell.add_table(
+                rows=len(nested_table.rows), cols=len(nested_table.columns)
+            )
+            new_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+            for r_i, rw in enumerate(nested_table.rows):
+                for c_i, cll in enumerate(rw.cells):
+                    self._copy_text_and_formatting(cll, new_table.cell(r_i, c_i))
+
+    def _add_table(self, merged_table, curr_row, curr_col, table):
+        for row_index, row in enumerate(table.rows):
+            merged_table.rows[curr_row].height = Inches(2.76)
+            for col_index, cell in enumerate(row.cells):
+                target_cell = merged_table.cell(curr_row, curr_col)
+                target_cell.width = Inches(3.84)
+                self._copy_text_and_formatting(cell, target_cell)
+                self._maybe_add_nested_table(cell, target_cell)
+
+    def _add_student_content_to_merged_table(
+        self,
+        merged_table,
+        source_table,
+        student_index,
+        target_row_index,
+        picture_path=None,
+        picture_height=None,
+        picture_width=None,
+    ):
+        if student_index == 0:
+            for element_name in ["w:tblGrid", "w:tblPr"]:
+                utils.copy_table_element(
+                    source_table._tbl, merged_table._tbl, element_name
                 )
 
-            new_paragraph.alignment = source_paragraph.alignment
-            new_paragraph.paragraph_format.left_indent = (
-                source_paragraph.paragraph_format.left_indent
+        for row_index in range(
+            len(source_table._tbl.findall("./w:tr", namespaces=source_table._tbl.nsmap))
+        ):
+            target_row_element = merged_table.rows[target_row_index]._element
+            source_row_element = source_table.rows[row_index]._element
+            utils.addTrPr(source_row_element, target_row_element)
+
+            source_row_cells = source_row_element.findall(
+                "./w:tc", namespaces=source_row_element.nsmap
             )
-            for target_run, source_run in zip(paragraph.runs, source_paragraph.runs):
-                new_run = new_paragraph.add_run(target_run.text)
-                utils.preserve_formatting(new_run, source_run)
-    return final_doc
+            for col_index, source_cell in enumerate(source_row_cells):
+                target_cell = target_row_element[col_index]
+                for child in source_cell:
+                    utils.update_nested_table_styles(source_cell, source_row_element)
+                    target_cell.append(copy.deepcopy(child))
 
+            for cell in merged_table.rows[target_row_index].cells:
+                for paragraph in cell.paragraphs:
+                    for run in paragraph.runs:
+                        if "prof_educ_logo" in run.text:
+                            run.text = run.text.replace("prof_educ_logo", "")
+                            run.add_picture("pictures/professional-education-logo.png")
+                        if "bigger_educ_logo" in run.text:
+                            run.text = run.text.replace("bigger_educ_logo", "")
+                            run.add_picture(
+                                "pictures/professional-education-logo.png",
+                                width=Inches(1.53),
+                                height=Inches(1.09),
+                            )
 
-def add_student_content_to_merged_table(
-    merged_table, tbl, student_index, curr_index, picture_path=None, picture_height=None, picture_width=None
-):
-    if student_index == 0:
-        for element_name in ["w:tblGrid", "w:tblPr"]:
-            utils.copy_table_element(tbl._tbl, merged_table._tbl, element_name)
+            p = merged_table.rows[target_row_index].cells[0].add_paragraph()
+            if picture_path:
+                picture.add_float_picture(
+                    p,
+                    picture_path,
+                    height=picture_height,
+                    width=picture_width,
+                    pos_x=Pt(0),
+                    pos_y=Pt(0),
+                )
 
-    for row_index in range(
-        len(tbl._tbl.findall("./w:tr", namespaces=tbl._tbl.nsmap))
-    ):  # Iterate using XML
-        target_row = merged_table.rows[curr_index]._element
-        source_row_element = tbl.rows[row_index]._element
+    # --- Public Methods for Document Generation ---
 
-        utils.addTrPr(source_row_element, target_row)
+    def create_beginning_document(self):
+        def populator(row, student, index, data):
+            row.cells[0].text = str(index + 1)
+            row.cells[1].text = student.name
+            row.cells[2].text = data["student_company"]
 
-        # --- Copy cells from source row to target row ---
-        source_row_cells = source_row_element.findall(
-            "./w:tc", namespaces=source_row_element.nsmap
-        )
-        for col_index, source_cell in enumerate(source_row_cells):
-            target_cell = target_row[col_index]
-            for child in source_cell:
-                utils.update_nested_table_styles(source_cell, source_row_element)
-                target_cell.append(copy.deepcopy(child))
-        
-        for cell in merged_table.rows[curr_index].cells:
-            for paragraph in cell.paragraphs:
-                for run in paragraph.runs:
-                    if "prof_educ_logo" in run.text:
-                        run.text = run.text.replace("prof_educ_logo", "") 
-                        run.add_picture('pictures/professional-education-logo.png')
-                    if "bigger_educ_logo" in run.text:
-                        run.text = run.text.replace("bigger_educ_logo", "") 
-                        run.add_picture('pictures/professional-education-logo.png', width=Inches(1.53), height=Inches(1.09))
-                    
-
-        first_cell = merged_table.rows[curr_index].cells[0]
-        curr_index += 1
-        p = first_cell.add_paragraph()
-        if picture_path: 
-            picture.add_float_picture(
-                p,
-                picture_path,
-                height=picture_height,
-                width=picture_width,
-                pos_x=Pt(0),
-                pos_y=Pt(0),
-            )
-
-
-def create_tractor_certificate(replacement_dict, students, picture_front, picture_back):
-    if not students:
-        return Document()
-
-    merged_doc = Document()
-    merged_doc = utils.fit_more_rows(merged_doc)
-    utils.set_default_font(merged_doc)
-
-    merged_table = merged_doc.add_table(rows=len(students), cols=2)
-    merged_doc.add_page_break()
-    merged_tractor_table = merged_doc.add_table(rows=len(students), cols=2)
-
-    curr_index = 0
-    for student_index, student in enumerate(students):
-        local_dict = make_student_copy(replacement_dict, student)
-
-        doc = DocxTemplate("templates/certificate_tractor.docx")
-        doc.render(local_dict)
-
-        add_student_content_to_merged_table(
-            merged_table, doc.tables[0], student_index, curr_index, picture_front, picture_height=TRACTOR_CERT_HEIGHT, picture_width=TRACTOR_CERT_WIDTH
+        return self._create_list_based_document(
+            "templates/Приказ о начале.docx", populator
         )
 
-        add_student_content_to_merged_table(
-            merged_tractor_table, doc.tables[1], student_index, curr_index, picture_back, picture_height=TRACTOR_CERT_HEIGHT, picture_width=TRACTOR_CERT_WIDTH
+    def create_end_doc(self):
+        def populator(row, student, index, data):
+            row.cells[0].text = str(index + 1)
+            row.cells[1].text = student.name
+            row.cells[2].text = data["student_company"]
+            row.cells[3].text = student.cert_number
+
+        return self._create_list_based_document(
+            "templates/Приказ о выпуске.docx", populator
         )
-        curr_index += 1
 
-    return merged_doc
+    def create_protocol_doc(self):
+        def populator(row, student, index, data):
+            row.cells[0].text = str(index + 1)
+            row.cells[1].text = student.name
+            row.cells[2].text = data["student_company"]
+            row.cells[3].text = student.cert_number
 
+        return self._create_list_based_document("templates/Протокол.docx", populator)
 
-def create_height_certificate(replacement_dict, students):
-    if not students:
-        return Document()
+    def create_labour_protection_protocol(self):
+        def populator(row, student, index, data):
+            row.cells[0].text = str(index + 1)
+            row.cells[1].text = student.name
+            row.cells[2].text = student.role
+            row.cells[3].text = data["student_company"]
+            row.cells[4].text = ""
+            row.cells[5].text = data["end_date"]
 
-    merged_doc = Document()
-    merged_doc = utils.fit_more_rows(merged_doc)
-    utils.set_default_font(merged_doc)
-
-    merged_table = merged_doc.add_table(rows=len(students), cols=3)
-
-    curr_index = 0
-    for student_index, student in enumerate(students):
-        local_dict = make_student_copy(replacement_dict, student)
-
-        doc = DocxTemplate("templates/height_certificate.docx")
-        doc.render(local_dict)
-
-        add_student_content_to_merged_table(
-            merged_table,
-            doc.tables[0],
-            student_index,
-            curr_index
+        return self._create_list_based_document(
+            "templates/protocol_milana.docx", populator
         )
-        curr_index += 1
 
-    return merged_doc
+    def create_confirmation_page(self, picture_path):
+        table_configs = [
+            {
+                "cols": 2,
+                "picture_path": picture_path,
+                "picture_height": Inches(5.54),
+                "picture_width": Inches(7.85),
+            },
+            {
+                "cols": 2,
+                "picture_path": picture_path,
+                "picture_height": Inches(5.54),
+                "picture_width": Inches(7.85),
+            },
+        ]
+        return self._create_merged_doc_from_template_rows(
+            "templates/milana_conf_page.docx", table_configs
+        )
+
+    def create_height_certificate(self):
+        table_configs = [{"cols": 3}]
+        return self._create_merged_doc_from_template_rows(
+            "templates/height_certificate.docx", table_configs
+        )
+
+    def create_tractor_certificate(self, picture_front, picture_back):
+        table_configs = [
+            {
+                "cols": 2,
+                "picture_path": picture_front,
+                "picture_height": TRACTOR_CERT_HEIGHT,
+                "picture_width": TRACTOR_CERT_WIDTH,
+            },
+            {
+                "cols": 2,
+                "picture_path": picture_back,
+                "picture_height": TRACTOR_CERT_HEIGHT,
+                "picture_width": TRACTOR_CERT_WIDTH,
+            },
+        ]
+        return self._create_merged_doc_from_template_rows(
+            "templates/certificate_tractor.docx", table_configs
+        )
+
+    def create_tractor_certs(self):
+        blue = self.create_tractor_certificate(
+            "pictures/tractor-background-blue.png",
+            "pictures/tractor-background-blue-with-tractor.png",
+        )
+
+        # For the green certificate, we need a modified dictionary.
+        # We create a temporary generator with this new dictionary to keep the logic clean.
+        green_dict = self.replacement_dict.copy()
+        green_dict["student_profession"] = TRACTOR_PROFESSION_WORDING
+        green_generator = DocumentGenerator(green_dict, self.students)
+        green = green_generator.create_tractor_certificate(
+            "pictures/tractor-background-green.png",
+            "pictures/tractor-background-green-with-tractor.png",
+        )
+        return (blue, green)
+
+    # --- Methods with unique logic, kept as is but moved into the class ---
+
+    # This is kept as a separate function because it tries to fit two students per row.
+    def create_certificate_for_labour_protection(self):
+        if not self.students:
+            return Document()
+
+        merged_doc = Document()
+        merged_doc = utils.fit_more_rows(merged_doc)
+        utils.set_default_font(merged_doc)
+
+        num_rows = math.ceil(len(self.students) / 2)
+        merged_table_front = merged_doc.add_table(rows=num_rows, cols=2)
+        merged_table_front.style = "TableGrid"
+        merged_doc.add_page_break()
+        merged_table_back = merged_doc.add_table(rows=num_rows, cols=2)
+
+        curr_row, curr_col = 0, 0
+        for student in self.students:
+            local_dict = make_student_copy(self.replacement_dict, student)
+            doc = DocxTemplate("templates/labour_protection.docx")
+            doc.render(local_dict)
+
+            self._add_table(merged_table_front, curr_row, curr_col, doc.tables[0])
+            self._add_table(merged_table_back, curr_row, curr_col, doc.tables[1])
+
+            curr_col += 1
+            if curr_col == 2:
+                curr_col = 0
+                curr_row += 1
+        return merged_doc
+
+    def create_certificate(self):
+        """
+        Generates the 'Свидетельство' document.
+        This now uses the standard 'Merge-to-Shell' pattern for consistency.
+        """
+        # 1. Define the configuration for this specific certificate
+        table_configs = [
+            {
+                "cols": 1,  # The certificate is in a single table column
+                "picture_path": "pictures/basic-cert-background.png",
+                "picture_height": CERT_HEIGHT_INCHES,
+                "picture_width": CERT_WIDTH_INCHES,
+            }
+        ]
+
+        # 2. Call the standardized helper with the correct template and config
+        return self._create_merged_doc_from_template_rows(
+            "templates/свидетельство.docx", table_configs
+        )
 
 
-def create_tractor_certs(dict, students):
-    blue = create_tractor_certificate(
-        dict, students, "pictures/tractor-background-blue.png", "pictures/tractor-background-blue-with-tractor.png"
-    )
-    dict_with_profession_replaced = dict.copy()
-    dict_with_profession_replaced["student_profession"] = TRACTOR_PROFESSION_WORDING
-    green = create_tractor_certificate(
-        dict_with_profession_replaced,
-        students,
-        "pictures/tractor-background-green.png",
-        "pictures/tractor-background-green-with-tractor.png",
-    )
-    return (blue, green)
-
-
-def create_beginning_document(beginning_dict, students):
-    """Creates a Word document with the provided information."""
-
-    doc = DocxTemplate("templates/Приказ о начале.docx")
-    doc.render(beginning_dict)
-    utils.set_default_font(doc)
-    table = doc.tables[0]
-
-    for index, student in enumerate(students):
-        # Create a new row
-        new_row = table.add_row()
-
-        # Populate cells in the new row
-        new_row.cells[0].text = str(index + 1)
-        new_row.cells[1].text = student.name
-        new_row.cells[2].text = beginning_dict["student_company"]
-
-        # Add more cells for other data (profession, date, etc.) if needed
-    return doc
-
-
-def create_end_doc(replacement_dict, students):
-    """Creates a Word document with the provided information."""
-
-    doc = DocxTemplate("templates/Приказ о выпуске.docx")
-    doc.render(replacement_dict)
-    utils.set_default_font(doc)
-    table = doc.tables[0]
-
-    for index, student in enumerate(students):
-        # Create a new row
-        new_row = table.add_row()
-
-        # Populate cells in the new row
-        new_row.cells[0].text = str(index + 1)
-        new_row.cells[1].text = student.name
-        new_row.cells[2].text = replacement_dict["student_company"]
-        new_row.cells[3].text = student.cert_number
-
-    return doc
-
-
-def create_protocol_doc(replacement_dict, students):
-    """Creates a Word document with the provided information."""
-
-    doc = DocxTemplate("templates/Протокол.docx")
-    doc.render(replacement_dict)
-    utils.set_default_font(doc)
-    table = doc.tables[0]
-
-    for index, student in enumerate(students):
-        # Create a new row
-        new_row = table.add_row()
-
-        # Populate cells in the new row
-        new_row.cells[0].text = str(index + 1)
-        new_row.cells[1].text = student.name
-        new_row.cells[2].text = replacement_dict["student_company"]
-        new_row.cells[3].text = student.cert_number
-
-    return doc
-
-
-def create_labour_protection_protocol(replacement_dict, students):
-    """Creates a Word document with the provided information."""
-
-    doc = DocxTemplate("templates/protocol_milana.docx")
-    doc.render(replacement_dict)
-    utils.set_default_font(doc)
-    table = doc.tables[0]
-
-    for index, student in enumerate(students):
-        # Create a new row
-        new_row = table.add_row()
-
-        # Populate cells in the new row
-        new_row.cells[0].text = str(index + 1)
-        new_row.cells[1].text = student.name
-        new_row.cells[2].text = student.role
-        new_row.cells[3].text = replacement_dict["student_company"]
-        new_row.cells[4].text = ''
-        new_row.cells[5].text = replacement_dict['end_date']
-
-    return doc
-
+# ==============================================================================
+# --- Streamlit UI ---
+# ==============================================================================
 
 st.title("Профессиональное обучение")
 
-# Input 1: Text Input
+# --- Input Fields ---
 available_professions = utils.load_from_pickle("data/professions.pickle")
 student_profession = utils.choose_profession(available_professions)
 
@@ -447,88 +410,80 @@ end_number = st.number_input(
     "номер приказа об окончании", step=1, value=1, placeholder=808
 )
 
-# this should be replaced by a scroll through
 teacher_name = utils.choose_teacher(utils.load_from_pickle("data/teachers.pickle"))
-
 company = st.text_input(
     "Предприятие", "заявление", placeholder="Наименование предприятия или 'заявление'"
 )
 student_names = st.text_area("Введите имена студентов, по одному на строку").split("\n")
+
+# --- Data Processing ---
 student_data = []
 for line in student_names:
     if line:
         items = [item for item in line.split("\t") if item]
-        certificate_number, _, _, name, *category = (
-            items  # Split each line by tab
+        certificate_number, _, _, name, *category = items
+        machine_category, role = utils.parse_machine_cat_or_role(
+            student_profession, category[0] if category else ""
         )
-        (machine_category, role) = utils.parse_machine_cat_or_role(student_profession, category[0] if category else "")
         cert_number = utils.get_cert_number(certificate_number)
         student_data.append(
-            utils.Student(name=name, cert_number=cert_number, machine_category=machine_category, role=role)
+            utils.Student(
+                name=name,
+                cert_number=cert_number,
+                machine_category=machine_category,
+                role=role,
+            )
         )
-num_students = len(student_data)
 
-formatted_beginning_date = utils.format_date(beginning_date)
-formatted_end_date = utils.format_date(end_date)
-expiration_date = utils.format_date((end_date + relativedelta(years=3)))
 replacement_dict = {
-    "beginning_date": formatted_beginning_date,
+    "beginning_date": utils.format_date(beginning_date),
     "beginning_number": beginning_number,
-    "end_date": formatted_end_date,
+    "end_date": utils.format_date(end_date),
     "end_number": end_number,
     "student_company": company,
     "teacher_name": teacher_name,
-    "num_students": num_students,
+    "num_students": len(student_data),
     "class": "4",
     "year": end_date.year,
-    "expiration_date": expiration_date,
+    "expiration_date": utils.format_date((end_date + relativedelta(years=3))),
 }
-if student_profession: 
+if student_profession:
     if student_profession.hours_str:
-        replacement_dict['hours'] = student_profession.hours_str
-    if student_profession.formatted_profession: 
-        replacement_dict['student_profession'] = student_profession.formatted_profession
+        replacement_dict["hours"] = student_profession.hours_str
+    if student_profession.formatted_profession:
+        replacement_dict["student_profession"] = student_profession.formatted_profession
 
-beginning_doc = create_beginning_document(replacement_dict, student_data)
-end_doc = create_end_doc(replacement_dict, student_data)
-protocol = create_protocol_doc(replacement_dict, student_data)
-certificate_docs = create_certificate(replacement_dict, student_data)
-(blue_tractor_cert, green_tractor_cert) = create_tractor_certs(
-    replacement_dict, student_data
+# --- Document Generation using the new Factory Class ---
+generator = DocumentGenerator(replacement_dict, student_data)
+
+beginning_doc = generator.create_beginning_document()
+end_doc = generator.create_end_doc()
+protocol = generator.create_protocol_doc()
+certificate_docs = generator.create_certificate()
+blue_tractor_cert, green_tractor_cert = generator.create_tractor_certs()
+milana_conf_page = generator.create_confirmation_page(
+    "pictures/tractor-background-green.png"
 )
-milana_conf_page = create_confirmation_page(replacement_dict, student_data, 'pictures/tractor-background-green.png')
-milana_cert = create_certificate_for_labour_protection(replacement_dict, student_data)
-labour_protection_protocol = create_labour_protection_protocol(
-    replacement_dict, student_data
-)
-height_certificate = create_height_certificate(replacement_dict, student_data)
+milana_cert = generator.create_certificate_for_labour_protection()
+labour_protection_protocol = generator.create_labour_protection_protocol()
+height_certificate = generator.create_height_certificate()
 
-show_documents = st.button("Сгенерировать документы")
-
-if show_documents:
-    if not student_profession:
-        st.warning("Укажите профессию")
-    if not teacher_name:
-        st.warning("Укажите преподователя")
-    if not beginning_date:
-        st.warning("Укажите дату начала")
-    if not end_date:
-        st.warning("Укажите дату окончания")
-    if not beginning_number:
-        st.warning("Укажите номер приказа о начале")
-    if not end_number:
-        st.warning("Укажите номер приказа о выпуске")
-    if num_students == 0:
-        st.warning("Укажите обучающихся")
-
-    if (
-        student_profession
-        and teacher_name
-        and beginning_date
-        and end_date
-        and beginning_number
-        and end_number
+# --- Display Logic ---
+if st.button("Сгенерировать документы"):
+    # Input validation
+    if not all(
+        [
+            student_profession,
+            teacher_name,
+            beginning_date,
+            end_date,
+            beginning_number,
+            end_number,
+            student_data,
+        ]
     ):
+        st.warning("Пожалуйста, заполните все поля и добавьте хотя бы одного студента.")
+    else:
         document_tabs = st.tabs(
             [
                 "Приказ о начале",
@@ -537,76 +492,57 @@ if show_documents:
                 "Свидетельство",
                 "Свидетельство тракторов синее",
                 "Свидетельство тракторов зеленое",
-                "Милана удостоверение", 
+                "Милана удостоверение",
                 "Милана св-во охрана труда",
-                'Милана протокол охрана труда',
-                'На высоте',
+                "Милана протокол охрана труда",
+                "На высоте",
             ]
         )
-        with document_tabs[0]:  # Приказ о начале
+        with document_tabs[0]:
             utils.display_docx_content(beginning_doc)
-
-        with document_tabs[1]:  # Приказ об окончании
+        with document_tabs[1]:
             utils.display_docx_content(end_doc)
-
-        with document_tabs[2]:  # Протокол
+        with document_tabs[2]:
             utils.display_docx_content(protocol)
-
-        with document_tabs[3]:  # Свидетельство
+        with document_tabs[3]:
             utils.display_docx_content(certificate_docs)
-
-        with document_tabs[4]:  # Свидетельство тракторов
+        with document_tabs[4]:
             utils.display_docx_content(blue_tractor_cert)
-
         with document_tabs[5]:
             utils.display_docx_content(green_tractor_cert)
-        with document_tabs[6]: 
+        with document_tabs[6]:
             utils.display_docx_content(milana_conf_page)
-        with document_tabs[7]: 
+        with document_tabs[7]:
             utils.display_docx_content(milana_cert)
-        with document_tabs[8]: 
+        with document_tabs[8]:
             utils.display_docx_content(labour_protection_protocol)
-        with document_tabs[9]: 
+        with document_tabs[9]:
             utils.display_docx_content(height_certificate)
 
-# --- Create a ZIP archive in memory ---
+
+# --- Create ZIP archive for download ---
 zip_buffer = BytesIO()
 with zipfile.ZipFile(zip_buffer, "w") as zipf:
-    # Add the beginning document
-    with zipf.open("Приказ о начале.docx", "w") as f:
-        beginning_doc.save(f)
-
-    # Add the end document
-    with zipf.open("Приказ о выпуске.docx", "w") as f:
-        end_doc.save(f)
-
-    with zipf.open("Протокол.docx", "w") as f:
-        protocol.save(f)
-
-    with zipf.open("Свидетельство.docx", "w") as f:
-        certificate_docs.save(f)
-
-    with zipf.open("Свидетельство синее трактор.docx", "w") as f:
-        blue_tractor_cert.save(f)
-
-    with zipf.open("Свидетельство зеленое трактор.docx", "w") as f:
-        green_tractor_cert.save(f)
-    with zipf.open("Удостоверение Милана.docx", "w") as f:
-        milana_conf_page.save(f)
-    with zipf.open("Свидетельство Милана.docx", "w") as f:
-        milana_cert.save(f)
-    with zipf.open('Протокол Милана.docx', 'w') as f:
-        labour_protection_protocol.save(f)
-    with zipf.open('На высоте.docx', 'w') as f:
-        height_certificate.save(f)
+    docs_to_zip = {
+        "Приказ о начале.docx": beginning_doc,
+        "Приказ о выпуске.docx": end_doc,
+        "Протокол.docx": protocol,
+        "Свидетельство.docx": certificate_docs,
+        "Свидетельство синее трактор.docx": blue_tractor_cert,
+        "Свидетельство зеленое трактор.docx": green_tractor_cert,
+        "Удостоверение Милана.docx": milana_conf_page,
+        "Свидетельство Милана.docx": milana_cert,
+        "Протокол Милана.docx": labour_protection_protocol,
+        "На высоте.docx": height_certificate,
+    }
+    for filename, doc in docs_to_zip.items():
+        with zipf.open(filename, "w") as f:
+            doc.save(f)
 
 zip_buffer.seek(0)
-
-formatted_end_date = end_date.strftime("%d.%m.%Y")
-# --- Download the ZIP archive ---
 st.download_button(
     label="Скачать документы (ZIP)",
     data=zip_buffer,
-    file_name=f"{formatted_end_date}.zip",
+    file_name=f"{end_date.strftime('%d.%m.%Y')}.zip",
     mime="application/zip",
 )
