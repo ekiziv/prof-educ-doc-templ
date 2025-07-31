@@ -539,101 +539,87 @@ if student_profession:
     if student_profession.formatted_profession:
         replacement_dict["student_profession"] = student_profession.formatted_profession
 
-# --- Document Generation using the new Factory Class ---
 generator = DocumentGenerator(replacement_dict, student_data)
 
-beginning_doc = generator.create_beginning_document()
-end_doc = generator.create_end_doc()
-protocol = generator.create_protocol_doc()
-certificate_docs = generator.create_certificate()
-blue_tractor_cert, green_tractor_cert = generator.create_tractor_certs()
-milana_conf_page = generator.create_confirmation_page(
-    "pictures/tractor-background-green.png"
-)
-milana_cert = generator.create_certificate_for_labour_protection()
-labour_protection_protocol = generator.create_labour_protection_protocol()
-height_certificate = generator.create_height_certificate()
-ud_rosa = generator.create_ud()
+# --- Step 1: Define all possible document choices ---
+# This maps a user-friendly name to the function that creates it.
+# This makes the code much cleaner and easier to maintain.
+doc_options = {
+    "Приказ о начале": generator.create_beginning_document,
+    "Приказ о выпуске": generator.create_end_doc,
+    "Протокол": generator.create_protocol_doc,
+    "Свидетельство": generator.create_certificate,
+    "Свидетельство тракторов (синее)": lambda: generator.create_tractor_certs()[0],
+    "Свидетельство тракторов (зеленое)": lambda: generator.create_tractor_certs()[1],
+    "Милана (удостоверение)": lambda: generator.create_confirmation_page(
+        "pictures/tractor-background-green.png"
+    ),
+    "Милана (св-во охрана труда)": generator.create_certificate_for_labour_protection,
+    "Милана (протокол охрана труда)": generator.create_labour_protection_protocol,
+    "На высоте": generator.create_height_certificate,
+    "Удостоверение Роза": generator.create_ud,
+}
 
-# --- Display Logic ---
-if st.button("Сгенерировать документы"):
+# --- Step 2: Create the Checkbox UI ---
+st.subheader("Выберите документы для генерации и скачивания:")
+
+# Use columns for a neater layout
+cols = st.columns(3)
+user_selections = {}
+# Create a checkbox for each document option, defaulting to True (selected)
+for i, name in enumerate(doc_options.keys()):
+    with cols[i % 3]:
+        user_selections[name] = st.checkbox(name, value=False)
+
+# --- Step 3: The Main "Generate and Download" Button ---
+if st.button("Сгенерировать и подготовить к скачиванию"):
     # Input validation
-    if not all(
-        [
-            student_profession,
-            teacher_name,
-            beginning_date,
-            end_date,
-            beginning_number,
-            end_number,
-            student_data,
-        ]
-    ):
+    if not all([student_profession, teacher_name, student_data]):
         st.warning("Пожалуйста, заполните все поля и добавьте хотя бы одного студента.")
     else:
-        document_tabs = st.tabs(
-            [
-                "Приказ о начале",
-                "Приказ об окончании",
-                "Протокол",
-                "Свидетельство",
-                "Свидетельство тракторов синее",
-                "Свидетельство тракторов зеленое",
-                "Милана удостоверение",
-                "Милана св-во охрана труда",
-                "Милана протокол охрана труда",
-                "На высоте",
-                "Удостоверение Роза", 
-            ]
-        )
-        with document_tabs[0]:
-            utils.display_docx_content(beginning_doc)
-        with document_tabs[1]:
-            utils.display_docx_content(end_doc)
-        with document_tabs[2]:
-            utils.display_docx_content(protocol)
-        with document_tabs[3]:
-            utils.display_docx_content(certificate_docs)
-        with document_tabs[4]:
-            utils.display_docx_content(blue_tractor_cert)
-        with document_tabs[5]:
-            utils.display_docx_content(green_tractor_cert)
-        with document_tabs[6]:
-            utils.display_docx_content(milana_conf_page)
-        with document_tabs[7]:
-            utils.display_docx_content(milana_cert)
-        with document_tabs[8]:
-            utils.display_docx_content(labour_protection_protocol)
-        with document_tabs[9]:
-            utils.display_docx_content(height_certificate)
-        with document_tabs[10]: 
-            utils.display_docx_content(ud_rosa)
+        # This dictionary will hold the documents that are actually generated.
+        docs_to_zip = {}
+        # A placeholder to show generation progress
+        progress_bar = st.progress(0, "Начинаем генерацию...")
 
+        selected_docs = [name for name, selected in user_selections.items() if selected]
+        total_docs = len(selected_docs)
 
-# --- Create ZIP archive for download ---
-zip_buffer = BytesIO()
-with zipfile.ZipFile(zip_buffer, "w") as zipf:
-    docs_to_zip = {
-        "Приказ о начале.docx": beginning_doc,
-        "Приказ о выпуске.docx": end_doc,
-        "Протокол.docx": protocol,
-        "Свидетельство.docx": certificate_docs,
-        "Свидетельство синее трактор.docx": blue_tractor_cert,
-        "Свидетельство зеленое трактор.docx": green_tractor_cert,
-        "Удостоверение Милана.docx": milana_conf_page,
-        "Свидетельство Милана.docx": milana_cert,
-        "Протокол Милана.docx": labour_protection_protocol,
-        "На высоте.docx": height_certificate,
-        "Удостоверение Роза.docx": ud_rosa,
-    }
-    for filename, doc in docs_to_zip.items():
-        with zipf.open(filename, "w") as f:
-            doc.save(f)
+        # Loop through the user's selections and generate only the chosen documents
+        for i, name in enumerate(selected_docs):
+            if user_selections[name]:  # If the box is checked
+                progress_text = f"Генерация: {name} ({i+1}/{total_docs})"
+                st.write(progress_text)
+                progress_bar.progress((i + 1) / total_docs, text=progress_text)
 
-zip_buffer.seek(0)
-st.download_button(
-    label="Скачать документы (ZIP)",
-    data=zip_buffer,
-    file_name=f"{end_date.strftime('%d.%m.%Y')}.zip",
-    mime="application/zip",
-)
+                # Look up the correct function from our options and call it
+                generator_func = doc_options[name]
+                generated_doc = generator_func()
+
+                # Add the generated document to our dictionary for zipping
+                docs_to_zip[f"{name}.docx"] = generated_doc
+
+        progress_bar.empty()
+
+        # --- Step 4: Create the ZIP archive and Download Button ---
+        if not docs_to_zip:
+            st.warning("Вы не выбрали ни одного документа для генерации.")
+        else:
+            st.success("Все выбранные документы успешно сгенерированы!")
+
+            zip_buffer = BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w") as zipf:
+                for filename, doc in docs_to_zip.items():
+                    # Save each doc into the in-memory zip file
+                    with zipf.open(filename, "w") as f:
+                        doc.save(f)
+
+            zip_buffer.seek(0)
+
+            # Display the download button for the created ZIP file
+            st.download_button(
+                label="✅ Скачать документы (ZIP)",
+                data=zip_buffer,
+                file_name=f"{end_date.strftime('%d.%m.%Y')}.zip",
+                mime="application/zip",
+            )
