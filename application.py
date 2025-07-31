@@ -270,6 +270,7 @@ class DocumentGenerator:
             row.cells[1].text = student.name
             row.cells[2].text = data["student_company"]
             row.cells[3].text = student.cert_number
+            row.cells[4].text = student.razryad if student.razryad > 0 else ""
 
         return self._create_list_based_document("templates/Протокол.docx", populator)
 
@@ -524,10 +525,14 @@ if student_names:
         engine="python",  # A more robust engine for varied delimiters or formats
         index_col=False,
     )
-    print(df)
     try:
         df["cert_number"] = (
             pd.to_numeric(df["cert_id_raw"].astype(str).str.strip("."), errors="coerce")
+            .fillna(0)
+            .astype(int)
+        )
+        df["razryad"] = (
+            pd.to_numeric(df["razryad"].astype(str).str.strip("."), errors="coerce")
             .fillna(0)
             .astype(int)
         )
@@ -542,16 +547,14 @@ if student_names:
         student_data = [
             utils.Student(
                 name=row.student_name,
-                cert_number=row.cert_number,
+                cert_number=str(row.cert_number),
                 machine_category=row.machine_category,
                 role=row.role,
-                razryad=row.razryad,
+                razryad=str(row.razryad),
             )
             for row in df.itertuples()
         ]
-        print(student_data)
     except Exception as e:
-        print(e)
         st.warning(
             "Please use an integer as the certificate number. It is a required field."
         )
@@ -574,85 +577,144 @@ if student_profession:
     if student_profession.formatted_profession:
         replacement_dict["student_profession"] = student_profession.formatted_profession
 
+# ==============================================================================
+# --- Document Generation and UI ---
+# ==============================================================================
+
 generator = DocumentGenerator(replacement_dict, student_data)
 
-# --- Step 1: Define all possible document choices ---
-# This maps a user-friendly name to the function that creates it.
-# This makes the code much cleaner and easier to maintain.
+# --- Define all possible document choices ---
+# Replace your old doc_options with this new structure
+
 doc_options = {
-    "Приказ о начале": generator.create_beginning_document,
-    "Приказ о выпуске": generator.create_end_doc,
-    "Протокол": generator.create_protocol_doc,
-    "Свидетельство": generator.create_certificate,
-    "Свидетельство тракторов (синее)": lambda: generator.create_tractor_certs()[0],
-    "Свидетельство тракторов (зеленое)": lambda: generator.create_tractor_certs()[1],
-    "Милана (удостоверение)": lambda: generator.create_confirmation_page(
-        "pictures/tractor-background-green.png"
-    ),
-    "Милана (св-во охрана труда)": generator.create_certificate_for_labour_protection,
-    "Милана (протокол охрана труда)": generator.create_labour_protection_protocol,
-    "На высоте": generator.create_height_certificate,
-    "Удостоверение Роза": generator.create_ud,
-    "Диплом": generator.create_diploma,
+    # --- Column 1: Official Documents ---
+    "Приказ о начале": {"func": generator.create_beginning_document, "col": 1},
+    "Приказ о выпуске": {"func": generator.create_end_doc, "col": 1},
+    "Протокол": {"func": generator.create_protocol_doc, "col": 1},
+    "Милана (протокол охрана труда)": {
+        "func": generator.create_labour_protection_protocol,
+        "col": 2,
+    },
+    "Свидетельство": {"func": generator.create_certificate, "col": 1},
+    "Свидетельство тракторов (синее)": {
+        "func": lambda: generator.create_tractor_certs()[0],
+        "col": 1,
+    },
+    "Свидетельство тракторов (зеленое)": {
+        "func": lambda: generator.create_tractor_certs()[1],
+        "col": 1,
+    },
+    "Милана (удостоверение)": {
+        "func": lambda: generator.create_confirmation_page(
+            "pictures/tractor-background-green.png"
+        ),
+        "col": 2,
+    },
+    "Милана (св-во охрана труда)": {
+        "func": generator.create_certificate_for_labour_protection,
+        "col": 2,
+    },
+    "На высоте": {"func": generator.create_height_certificate, "col": 2},
+    "Удостоверение Роза": {"func": generator.create_ud, "col": 1},
+    "Диплом": {"func": generator.create_diploma, "col": 1},
 }
 
-# --- Step 2: Create the Checkbox UI ---
+# --- State Management for Checkboxes ---
+
+# --- State Management for Checkboxes (this part is the same) ---
+if "doc_selections" not in st.session_state:
+    st.session_state.doc_selections = {name: False for name in doc_options.keys()}
+
+
+def handle_select_all(column_key, docs_in_column):
+    new_state = st.session_state[column_key]
+    for doc in docs_in_column:
+        st.session_state.doc_selections[doc] = new_state
+
+
+# --- Updated Checkbox UI ---
 st.subheader("Выберите документы для генерации и скачивания:")
 
-# Use columns for a neater layout
-cols = st.columns(3)
-user_selections = {}
-# Create a checkbox for each document option, defaulting to True (selected)
-for i, name in enumerate(doc_options.keys()):
-    with cols[i % 3]:
-        user_selections[name] = st.checkbox(name, value=False)
+# 1. Filter the document names into two lists based on their 'col' value
+col1_docs = [name for name, config in doc_options.items() if config["col"] == 1]
+col2_docs = [name for name, config in doc_options.items() if config["col"] == 2]
 
-# --- Step 3: The Main "Generate and Download" Button ---
+col1, col2 = st.columns(2)
+
+# --- Render Column 1 ---
+with col1:
+    # Determine the state of the master checkbox based on the children in this column
+    all_col1_selected = all(st.session_state.doc_selections[name] for name in col1_docs)
+
+    st.checkbox(
+        "Выбрать все в этом столбце",
+        value=all_col1_selected,
+        key="select_all_col1",
+        on_change=handle_select_all,
+        args=("select_all_col1", col1_docs),
+    )
+    st.markdown("---")
+    # Create the individual checkboxes for only the column 1 documents
+    for name in col1_docs:
+        st.checkbox(name, key=f"cb_{name}", value=st.session_state.doc_selections[name])
+
+# --- Render Column 2 ---
+with col2:
+    # Determine the state of the master checkbox for the second column
+    all_col2_selected = all(st.session_state.doc_selections[name] for name in col2_docs)
+
+    st.checkbox(
+        "Выбрать все в этом столбце",
+        value=all_col2_selected,
+        key="select_all_col2",
+        on_change=handle_select_all,
+        args=("select_all_col2", col2_docs),
+    )
+    st.markdown("---")
+    # Create the individual checkboxes for only the column 2 documents
+    for name in col2_docs:
+        st.checkbox(name, key=f"cb_{name}", value=st.session_state.doc_selections[name])
+
+
 if st.button("Сгенерировать и подготовить к скачиванию"):
     # Input validation
     if not all([student_profession, teacher_name, student_data]):
         st.warning("Пожалуйста, заполните все поля и добавьте хотя бы одного студента.")
     else:
-        # This dictionary will hold the documents that are actually generated.
         docs_to_zip = {}
-        # A placeholder to show generation progress
         progress_bar = st.progress(0, "Начинаем генерацию...")
 
-        selected_docs = [name for name, selected in user_selections.items() if selected]
+        # Get the list of selected documents directly from session state
+        selected_docs = [
+            name
+            for name, selected in st.session_state.doc_selections.items()
+            if selected
+        ]
         total_docs = len(selected_docs)
 
-        # Loop through the user's selections and generate only the chosen documents
+        # Loop and generate only the selected documents
         for i, name in enumerate(selected_docs):
-            if user_selections[name]:  # If the box is checked
-                progress_text = f"Генерация: {name} ({i+1}/{total_docs})"
-                st.write(progress_text)
-                progress_bar.progress((i + 1) / total_docs, text=progress_text)
+            progress_text = f"Генерация: {name} ({i+1}/{total_docs})"
+            st.write(progress_text)
+            progress_bar.progress((i + 1) / total_docs, text=progress_text)
 
-                # Look up the correct function from our options and call it
-                generator_func = doc_options[name]
-                generated_doc = generator_func()
-
-                # Add the generated document to our dictionary for zipping
-                docs_to_zip[f"{name}.docx"] = generated_doc
+            generator_func = doc_options[name]["func"]
+            generated_doc = generator_func()
+            docs_to_zip[f"{name}.docx"] = generated_doc
 
         progress_bar.empty()
 
-        # --- Step 4: Create the ZIP archive and Download Button ---
+        # --- Create the ZIP archive and Download Button ---
         if not docs_to_zip:
             st.warning("Вы не выбрали ни одного документа для генерации.")
         else:
             st.success("Все выбранные документы успешно сгенерированы!")
-
             zip_buffer = BytesIO()
             with zipfile.ZipFile(zip_buffer, "w") as zipf:
                 for filename, doc in docs_to_zip.items():
-                    # Save each doc into the in-memory zip file
                     with zipf.open(filename, "w") as f:
                         doc.save(f)
-
             zip_buffer.seek(0)
-
-            # Display the download button for the created ZIP file
             st.download_button(
                 label="✅ Скачать документы (ZIP)",
                 data=zip_buffer,
