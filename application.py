@@ -30,7 +30,7 @@ NAME_KEY = "student_name"
 CERTIFICATE_KEY = "certificate_number"
 MACHINE_CATEGORY = "machine_category"
 ROLE = "student_role"
-RAZRYAD = 'razryad'
+RAZRYAD = "razryad"
 
 TRACTOR_PROFESSION_WORDING = "19203 «Тракторист»"
 
@@ -130,6 +130,7 @@ class DocumentGenerator:
                     picture_path=config.get("picture_path"),
                     picture_height=config.get("picture_height"),
                     picture_width=config.get("picture_width"),
+                    picture_mode=config.get("picture_mode", "first_cell")
                 )
         return merged_doc
 
@@ -188,6 +189,7 @@ class DocumentGenerator:
         picture_path=None,
         picture_height=None,
         picture_width=None,
+        picture_mode="first_cell",
     ):
         if student_index == 0:
             for element_name in ["w:tblGrid", "w:tblPr"]:
@@ -224,17 +226,20 @@ class DocumentGenerator:
                                 width=Inches(1.53),
                                 height=Inches(1.09),
                             )
-
-            p = merged_table.rows[target_row_index].cells[0].add_paragraph()
             if picture_path:
-                picture.add_float_picture(
-                    p,
-                    picture_path,
-                    height=picture_height,
-                    width=picture_width,
-                    pos_x=Pt(0),
-                    pos_y=Pt(0),
-                )
+                if picture_mode == "all_cells":
+                    for cell in merged_table.rows[target_row_index].cells:
+                        p = cell.add_paragraph()
+                        picture.add_float_picture(
+                            p, picture_path, height=picture_height, width=picture_width,
+                            pos_x=Pt(0), pos_y=Pt(0)
+                        )
+                else:
+                    p = merged_table.rows[target_row_index].cells[0].add_paragraph()
+                    picture.add_float_picture(
+                        p, picture_path, height=picture_height, width=picture_width,
+                        pos_x=Pt(0), pos_y=Pt(0)
+                    )
 
     # --- Public Methods for Document Generation ---
 
@@ -379,7 +384,6 @@ class DocumentGenerator:
                 tbl_element = copy.deepcopy(table._tbl)
                 merged_doc._body._body.append(tbl_element)
 
-
         return merged_doc
 
     def create_tractor_certs(self):
@@ -451,6 +455,22 @@ class DocumentGenerator:
             "templates/свидетельство.docx", table_configs
         )
 
+    def create_diploma(self):
+        # Your diploma template has ONE table with TWO columns (front and back)
+        table_configs = [
+            {
+                "cols": 2,
+                "picture_path": "pictures/basic-cert-background-vert.png",
+                "picture_height": Inches(5.49),
+                "picture_width": Inches(3.72),
+                "picture_mode": "all_cells",
+            }
+        ]
+        # The rest of the function call is the same
+        return self._create_merged_doc_from_template_rows(
+            "templates/diploma.docx", table_configs
+        )
+
 
 # ==============================================================================
 # --- Streamlit UI ---
@@ -480,7 +500,14 @@ company = st.text_input(
 student_names = st.text_area("Введите имена студентов, по одному на строку")
 
 # Define column names for clarity. This is a huge advantage.
-column_names = ["cert_id_raw", "date", "course", "student_name", "category_or_student_role", "razryad"]
+column_names = [
+    "cert_id_raw",
+    "date",
+    "course",
+    "student_name",
+    "category_or_student_role",
+    "razryad",
+]
 
 # Use io.StringIO to let pandas read the string as if it were a file
 student_data = []
@@ -498,25 +525,37 @@ if student_names:
         index_col=False,
     )
     print(df)
-    df["cert_id_raw"] = df["cert_id_raw"].astype(str)
-    df["cert_number"] = df["cert_id_raw"].str.strip(".")
-    parsed_info = df.apply(
-        lambda row: utils.parse_machine_cat_or_role(student_profession, row["category_or_student_role"]),
-        axis=1,
-        result_type="expand",  # This splits the tuple result into two new columns
-    )
-    df[["machine_category", "role"]] = parsed_info
-    student_data = [
-        utils.Student(
-            name=row.student_name,
-            cert_number=row.cert_number,
-            machine_category=row.machine_category,
-            role=row.role,
-            razryad=row.razryad,
+    try:
+        df["cert_number"] = (
+            pd.to_numeric(df["cert_id_raw"].astype(str).str.strip("."), errors="coerce")
+            .fillna(0)
+            .astype(int)
         )
-        for row in df.itertuples()
-    ]
-    print(student_data)
+        parsed_info = df.apply(
+            lambda row: utils.parse_machine_cat_or_role(
+                student_profession, row["category_or_student_role"]
+            ),
+            axis=1,
+            result_type="expand",  # This splits the tuple result into two new columns
+        )
+        df[["machine_category", "role"]] = parsed_info
+        student_data = [
+            utils.Student(
+                name=row.student_name,
+                cert_number=row.cert_number,
+                machine_category=row.machine_category,
+                role=row.role,
+                razryad=row.razryad,
+            )
+            for row in df.itertuples()
+        ]
+        print(student_data)
+    except Exception as e:
+        print(e)
+        st.warning(
+            "Please use an integer as the certificate number. It is a required field."
+        )
+
 
 replacement_dict = {
     "beginning_date": utils.format_date(beginning_date),
@@ -554,6 +593,7 @@ doc_options = {
     "Милана (протокол охрана труда)": generator.create_labour_protection_protocol,
     "На высоте": generator.create_height_certificate,
     "Удостоверение Роза": generator.create_ud,
+    "Диплом": generator.create_diploma,
 }
 
 # --- Step 2: Create the Checkbox UI ---
