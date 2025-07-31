@@ -483,6 +483,23 @@ st.title("Профессиональное обучение")
 available_professions = utils.load_from_pickle("data/professions.pickle")
 student_profession = utils.choose_profession(available_professions)
 
+# Create a checkbox to ask the user if they want to override the default
+use_custom_duration = st.checkbox("Указать срок действия вручную")
+
+# We start by assuming we'll use the default value
+duration_in_years = 0
+
+# If the user checks the box, THEN we show the number input and use its value
+if use_custom_duration:
+    duration_in_years = st.number_input(
+        "Срок действия (в годах)",
+        min_value=1,
+        step=1,
+        help="Укажите, через сколько лет истекает срок действия удостоверения.",
+    )
+
+
+
 today = datetime.date.today()
 beginning_date = st.date_input("дата начала", value=today)
 end_date = st.date_input("дата окончания", value=today)
@@ -569,7 +586,11 @@ replacement_dict = {
     "teacher_name": teacher_name,
     "num_students": len(student_data),
     "year": end_date.year,
-    "expiration_date": utils.format_date((end_date + relativedelta(years=3))),
+    "expiration_date": (
+        ""
+        if duration_in_years == 0
+        else "Действительно до " + utils.format_date((end_date + relativedelta(years=duration_in_years)))
+    ),
 }
 if student_profession:
     if student_profession.hours_str:
