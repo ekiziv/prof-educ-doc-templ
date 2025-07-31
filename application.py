@@ -379,10 +379,6 @@ class DocumentGenerator:
                 tbl_element = copy.deepcopy(table._tbl)
                 merged_doc._body._body.append(tbl_element)
 
-            # 4. Add a page break after each student's content, except for the last one.
-            #    This ensures each student's certificate starts on a new page.
-            if index < len(self.students) - 1:
-                merged_doc.add_page_break()
 
         return merged_doc
 
