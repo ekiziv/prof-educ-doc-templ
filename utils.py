@@ -15,6 +15,7 @@ class Student:
     cert_number: str
     role: str
     machine_category: str
+    razryad: int
 
 def parse_machine_cat_or_role(chosen_profession, value):
     if value == '' or value == None: 
@@ -181,13 +182,82 @@ def update_nested_table_styles(source_cell, source_row_element):
                 # Set line spacing after to 0
                 spacing.set('{http://schemas.openxmlformats.org/wordprocessingml/2006/main}after', '0') 
 
-def set_default_font(final_doc, bold=False): 
-    style = final_doc.styles['Normal']
-    font = style.font
-    font.name = 'Times New Roman'
-    font.size = Pt(12)
-    if bold: 
-        font.bold = True
+
+def _reset_first_cell_spacing(tbl_element):
+    """
+    Finds the first cell of a table and forcibly resets the paragraph
+    spacing ('before' and 'after') of any paragraphs within it to zero.
+    This is a surgical fix for a giant invisible margin in a cell.
+    """
+    try:
+        # Use XPath to find the first table row, then the first table cell
+        first_tr = tbl_element.find(qn("w:tr"))
+        if first_tr is None:
+            return
+
+        first_tc = first_tr.find(qn("w:tc"))
+        if first_tc is None:
+            return
+
+        # Find all paragraphs within that first cell
+        for p in first_tc.findall(qn("w:p")):
+            # Get the paragraph properties element, or create it if it doesn't exist
+            pPr = p.get_or_add_pPr()
+            # Get the spacing element, or create it if it doesn't exist
+            spacing = pPr.get_or_add_spacing()
+            # Forcibly set the 'before' and 'after' spacing attributes to 0
+            spacing.set(qn("w:before"), "0")
+            spacing.set(qn("w:after"), "0")
+
+    except Exception as e:
+        # This is a complex operation, so we add a failsafe
+        st.warning(
+            f"A non-critical error occurred while trying to reset cell spacing: {e}"
+        )
+
+
+def set_default_font(doc, bold=False):
+    """
+    Sets the default font for the entire document by modifying the root styles.
+
+    This function targets both the 'Normal' style (for paragraphs) and common
+    default table styles ('Table Normal', 'Table Grid') to ensure consistency.
+
+    Args:
+        doc (docx.Document): The document object to modify.
+        bold (bool): Whether to make the default font bold. Defaults to False.
+    """
+    # 1. Set the default font for all PARAGRAPH styles based on 'Normal'
+    try:
+        style = doc.styles["Normal"]
+        font = style.font
+        font.name = "Times New Roman"
+        font.size = Pt(12)
+        font.bold = bold  # Directly sets True or False
+    except KeyError:
+        print("Warning: 'Normal' style not found in the document.")
+
+    # 2. Set the default font for TABLE styles. This is the crucial fix.
+    # We try common default table style names to be more robust.
+    found_table_style = False
+    for style_name in ["Table Normal", "Table Grid"]:
+        try:
+            table_style = doc.styles[style_name]
+            font = table_style.font
+            font.name = "Times New Roman"
+            font.size = Pt(12)
+            font.bold = bold
+            found_table_style = True
+            break  # Exit the loop once we've found and set a style
+        except KeyError:
+            # This style doesn't exist, so we'll try the next one.
+            continue
+
+    if not found_table_style:
+        print(
+            f"Warning: Could not find common table styles ('Table Normal', 'Table Grid'). "
+            f"Table fonts may not be set correctly."
+        )
 
 
 def fit_more_rows(document):
@@ -269,7 +339,7 @@ def choose_teacher(all_teachers):
         return None
 
 
-# Now it should be a dictionary from name to info 
+# Now it should be a dictionary from name to info
 def choose_profession(all_professions):
     """Handles profession selection and adding new professions."""
 

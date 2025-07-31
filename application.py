@@ -20,12 +20,17 @@ from docx.oxml import register_element_cls
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from dataclasses import dataclass
 from dateutil.relativedelta import relativedelta
+import csv
+import io
+import pprint
+import pandas as pd
 
 # --- Constants and Setup ---
 NAME_KEY = "student_name"
 CERTIFICATE_KEY = "certificate_number"
 MACHINE_CATEGORY = "machine_category"
 ROLE = "student_role"
+RAZRYAD = 'razryad'
 
 TRACTOR_PROFESSION_WORDING = "19203 «Тракторист»"
 
@@ -45,6 +50,7 @@ def make_student_copy(replacement_dict, student):
     local_dict[CERTIFICATE_KEY] = student.cert_number
     local_dict[ROLE] = student.role
     local_dict[MACHINE_CATEGORY] = student.machine_category
+    local_dict[RAZRYAD] = student.razryad
     return local_dict
 
 
@@ -319,6 +325,67 @@ class DocumentGenerator:
             "templates/certificate_tractor.docx", table_configs
         )
 
+    def _copy_table_layout(self, source_table, target_table):
+        """Copies column widths and table-level properties from a source to a target table."""
+        # Copy column widths
+        source_grid = source_table._tbl.find(
+            "w:tblGrid", namespaces=source_table._tbl.nsmap
+        )
+        if source_grid is not None:
+            target_table._tbl.replace(
+                target_table._tbl.find("w:tblGrid", namespaces=target_table._tbl.nsmap),
+                copy.deepcopy(source_grid),
+            )
+        # Copy table properties (like borders, alignment, etc.)
+        source_props = source_table._tbl.find(
+            "w:tblPr", namespaces=source_table._tbl.nsmap
+        )
+        if source_props is not None:
+            target_table._tbl.replace(
+                target_table._tbl.find("w:tblPr", namespaces=target_table._tbl.nsmap),
+                copy.deepcopy(source_props),
+            )
+
+    def create_ud(self):
+        """
+        Generates the 'Удостоверение' document by creating a sequence of tables
+        for each student and appending them to a final document.
+
+        This method assumes 'templates/x' contains exactly two tables:
+        - Table 1 (e.g., 2 columns, 3 rows)
+        - Table 2 (e.g., 2 columns, 4 rows)
+        """
+        if not self.students:
+            return Document()
+
+        # 1. Create the final, empty document that we will add everything to.
+        merged_doc = Document()
+        utils.set_default_font(merged_doc)
+
+        # 2. Loop through each student to generate their set of tables.
+        for index, student in enumerate(self.students):
+            # Create a dictionary with this student's specific data.
+            local_dict = make_student_copy(self.replacement_dict, student)
+
+            # Render the template with the student's data. This creates an
+            # in-memory doc with the two fully-rendered tables.
+            template_doc = DocxTemplate("templates/roza_ud.docx")
+            template_doc.render(local_dict)
+
+            # 3. Deep-copy each table from the rendered template into the final document.
+            #    This is the core logic for appending whole tables.
+            for table in template_doc.tables:
+                # We append a deep copy of the table's underlying XML element.
+                tbl_element = copy.deepcopy(table._tbl)
+                merged_doc._body._body.append(tbl_element)
+
+            # 4. Add a page break after each student's content, except for the last one.
+            #    This ensures each student's certificate starts on a new page.
+            if index < len(self.students) - 1:
+                merged_doc.add_page_break()
+
+        return merged_doc
+
     def create_tractor_certs(self):
         blue = self.create_tractor_certificate(
             "pictures/tractor-background-blue.png",
@@ -414,26 +481,46 @@ teacher_name = utils.choose_teacher(utils.load_from_pickle("data/teachers.pickle
 company = st.text_input(
     "Предприятие", "заявление", placeholder="Наименование предприятия или 'заявление'"
 )
-student_names = st.text_area("Введите имена студентов, по одному на строку").split("\n")
+student_names = st.text_area("Введите имена студентов, по одному на строку")
 
-# --- Data Processing ---
+# Define column names for clarity. This is a huge advantage.
+column_names = ["cert_id_raw", "date", "course", "student_name", "category_or_student_role", "razryad"]
+
+# Use io.StringIO to let pandas read the string as if it were a file
 student_data = []
-for line in student_names:
-    if line:
-        items = [item for item in line.split("\t") if item]
-        certificate_number, _, _, name, *category = items
-        machine_category, role = utils.parse_machine_cat_or_role(
-            student_profession, category[0] if category else ""
+if student_names:
+    data_io = io.StringIO(student_names)
+
+    # Use the powerful pd.read_csv function to parse the data
+    # We tell it the separator is a tab ('\t') and there's no header row.
+    df = pd.read_csv(
+        data_io,
+        sep=r"\t+",  # Specify the delimiter is a tab
+        header=None,  # The input data has no header row
+        names=column_names,  # Assign our defined column names
+        engine="python",  # A more robust engine for varied delimiters or formats
+        index_col=False,
+    )
+    print(df)
+    df["cert_id_raw"] = df["cert_id_raw"].astype(str)
+    df["cert_number"] = df["cert_id_raw"].str.strip(".")
+    parsed_info = df.apply(
+        lambda row: utils.parse_machine_cat_or_role(student_profession, row["category_or_student_role"]),
+        axis=1,
+        result_type="expand",  # This splits the tuple result into two new columns
+    )
+    df[["machine_category", "role"]] = parsed_info
+    student_data = [
+        utils.Student(
+            name=row.student_name,
+            cert_number=row.cert_number,
+            machine_category=row.machine_category,
+            role=row.role,
+            razryad=row.razryad,
         )
-        cert_number = utils.get_cert_number(certificate_number)
-        student_data.append(
-            utils.Student(
-                name=name,
-                cert_number=cert_number,
-                machine_category=machine_category,
-                role=role,
-            )
-        )
+        for row in df.itertuples()
+    ]
+    print(student_data)
 
 replacement_dict = {
     "beginning_date": utils.format_date(beginning_date),
@@ -443,7 +530,6 @@ replacement_dict = {
     "student_company": company,
     "teacher_name": teacher_name,
     "num_students": len(student_data),
-    "class": "4",
     "year": end_date.year,
     "expiration_date": utils.format_date((end_date + relativedelta(years=3))),
 }
@@ -467,6 +553,7 @@ milana_conf_page = generator.create_confirmation_page(
 milana_cert = generator.create_certificate_for_labour_protection()
 labour_protection_protocol = generator.create_labour_protection_protocol()
 height_certificate = generator.create_height_certificate()
+ud_rosa = generator.create_ud()
 
 # --- Display Logic ---
 if st.button("Сгенерировать документы"):
@@ -496,6 +583,7 @@ if st.button("Сгенерировать документы"):
                 "Милана св-во охрана труда",
                 "Милана протокол охрана труда",
                 "На высоте",
+                "Удостоверение Роза", 
             ]
         )
         with document_tabs[0]:
@@ -518,6 +606,8 @@ if st.button("Сгенерировать документы"):
             utils.display_docx_content(labour_protection_protocol)
         with document_tabs[9]:
             utils.display_docx_content(height_certificate)
+        with document_tabs[10]: 
+            utils.display_docx_content(ud_rosa)
 
 
 # --- Create ZIP archive for download ---
@@ -534,6 +624,7 @@ with zipfile.ZipFile(zip_buffer, "w") as zipf:
         "Свидетельство Милана.docx": milana_cert,
         "Протокол Милана.docx": labour_protection_protocol,
         "На высоте.docx": height_certificate,
+        "Удостоверение Роза.docx": ud_rosa,
     }
     for filename, doc in docs_to_zip.items():
         with zipf.open(filename, "w") as f:
