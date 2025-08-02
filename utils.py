@@ -8,6 +8,7 @@ from docx.shared import Inches, Pt
 from docx.oxml import OxmlElement
 from dataclasses import dataclass
 import profession_parsing
+from docx import Document
 
 @dataclass
 class Student:
@@ -258,6 +259,16 @@ def set_default_font(doc, bold=False):
             f"Warning: Could not find common table styles ('Table Normal', 'Table Grid'). "
             f"Table fonts may not be set correctly."
         )
+
+def _get_page_break_element():
+    """
+    Creates and returns the low-level lxml element for a page break paragraph.
+    This is done by creating a temporary paragraph in the document, adding a
+    page break, and then returning its underlying XML element.
+    """
+    p = Document().add_paragraph()
+    p.add_run().add_break(docx.enum.text.WD_BREAK.PAGE)
+    return p._p
 
 
 def fit_more_rows(document):

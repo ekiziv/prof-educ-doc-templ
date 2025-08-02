@@ -203,6 +203,8 @@ class DocumentGenerator:
                 "./w:tc", namespaces=source_row_element.nsmap
             )
             for col_index, source_cell in enumerate(source_row_cells):
+                print('Looking at table', row_index, 'col:', col_index)
+                print(target_row_element)
                 target_cell = target_row_element[col_index]
                 for child in source_cell:
                     utils.update_nested_table_styles(source_cell, source_row_element)
@@ -470,6 +472,55 @@ class DocumentGenerator:
             "templates/diploma.docx", table_configs
         )
 
+    def create_electro_safety(self):
+        """
+        Generates the 'Электробезопасность' document by grouping content by table type
+        to save pages. For each table in the template, it generates that table for all
+        students before moving to the next table.
+        """
+        if not self.students:
+            return Document()
+
+        # 1. PRE-COMPUTATION: Render the template once for each student and cache the result.
+        # This is efficient because we don't re-render the template multiple times.
+        rendered_docs = []
+        for student in self.students:
+            local_dict = make_student_copy(self.replacement_dict, student)
+            template_doc = DocxTemplate("templates/electro_safety.docx")
+            template_doc.render(local_dict)
+            rendered_docs.append(template_doc)
+
+        # If the template had no tables or there were no students, exit early.
+        if not rendered_docs or not rendered_docs[0].tables:
+            return Document()
+
+        # 2. ASSEMBLE THE FINAL DOCUMENT
+        merged_doc = Document()
+        utils.set_default_font(merged_doc)
+        # Get the raw XML for a page break paragraph.
+        page_break_element = utils._get_page_break_element()
+
+        # Get the number of tables from the first student's rendered doc (they are all the same).
+        num_tables_in_template = len(rendered_docs[0].tables)
+
+        # 3. Outer loop: Iterate through the TABLE INDEX (0, 1, 2, ...).
+        for table_index in range(num_tables_in_template):
+
+            # 4. Inner loop: Iterate through the pre-rendered STUDENT documents.
+            for student_doc in rendered_docs:
+
+                # Get the specific table we need (e.g., table 0) from the current student's document.
+                source_table = student_doc.tables[table_index]
+
+                # Append a deep copy of its XML to the final document.
+                tbl_element = copy.deepcopy(source_table._tbl)
+                merged_doc._body._body.append(tbl_element)
+
+            if table_index < num_tables_in_template - 1:
+                merged_doc._body._body.append(copy.deepcopy(page_break_element))
+
+        return merged_doc
+
 
 # ==============================================================================
 # --- Streamlit UI ---
@@ -657,6 +708,7 @@ doc_options = {
         ),
         "col": 2,
     },
+    "Электобезопасность": {"func": generator.create_electro_safety, "col": 2},
 }
 
 # --- State Management for Checkboxes ---
