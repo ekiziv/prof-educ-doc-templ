@@ -272,7 +272,7 @@ class DocumentGenerator:
             row.cells[1].text = student.name
             row.cells[2].text = data["student_company"]
             row.cells[3].text = student.cert_number
-            row.cells[4].text = student.razryad if student.razryad != "0" else ""
+            row.cells[5].text = student.razryad if student.razryad != "0" else ""
 
         return self._create_list_based_document("templates/Протокол.docx", populator)
 
