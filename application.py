@@ -203,8 +203,6 @@ class DocumentGenerator:
                 "./w:tc", namespaces=source_row_element.nsmap
             )
             for col_index, source_cell in enumerate(source_row_cells):
-                print('Looking at table', row_index, 'col:', col_index)
-                print(target_row_element)
                 target_cell = target_row_element[col_index]
                 for child in source_cell:
                     utils.update_nested_table_styles(source_cell, source_row_element)
@@ -471,6 +469,16 @@ class DocumentGenerator:
         return self._create_merged_doc_from_template_rows(
             "templates/diploma.docx", table_configs
         )
+    
+    def _get_page_break_element(self):
+        """
+        Creates and returns the low-level lxml element for a page break paragraph.
+        This is done by creating a temporary paragraph in the document, adding a
+        page break, and then returning its underlying XML element.
+        """
+        p = Document().add_paragraph()
+        p.add_run().add_break(docx.enum.text.WD_BREAK.PAGE)
+        return p._p
 
     def create_electro_safety(self):
         """
@@ -498,7 +506,7 @@ class DocumentGenerator:
         merged_doc = Document()
         utils.set_default_font(merged_doc)
         # Get the raw XML for a page break paragraph.
-        page_break_element = utils._get_page_break_element()
+        page_break_element = self._get_page_break_element()
 
         # Get the number of tables from the first student's rendered doc (they are all the same).
         num_tables_in_template = len(rendered_docs[0].tables)
