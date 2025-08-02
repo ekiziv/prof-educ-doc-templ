@@ -298,7 +298,7 @@ class DocumentGenerator:
                 "picture_width": Inches(7.85),
             },
             {
-                "cols": 2,
+                "cols": 1,
                 "picture_path": picture_path,
                 "picture_height": Inches(5.54),
                 "picture_width": Inches(7.85),
