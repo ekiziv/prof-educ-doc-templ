@@ -42,7 +42,6 @@ TRACTOR_CERT_WIDTH = Inches(8.04)
 
 register_element_cls("wp:anchor", picture.CT_Anchor)
 
-
 def make_student_copy(replacement_dict, student):
     """Creates a copy of the replacement dict with student-specific data."""
     local_dict = replacement_dict.copy()
@@ -89,22 +88,18 @@ class DocumentGenerator:
             row_populator_func(new_row, student, index, self.replacement_dict)
         return doc
 
-    def _create_merged_doc_from_template_rows(self, template_path, table_configs):
+    def _create_merged_doc_from_template_rows(
+        self, template_path, table_configs, fit_more_rows=True
+    ):
         """
-        Generic generator for certificates created by merging rows from a template.
-        Each student gets one row in the final document, built from a rendered template.
-        This pattern is used for tractor, height, and confirmation page certificates.
-
-        Args:
-            template_path (str): The path to the .docx template.
-            table_configs (list): A list of dictionaries, where each dict configures one
-                                  table to be processed from the template (e.g., picture details).
+        Generic generator for certificates using the reliable InlineImage method for logos.
         """
         if not self.students:
             return Document()
 
         merged_doc = Document()
-        merged_doc = utils.fit_more_rows(merged_doc)
+        if fit_more_rows:
+            merged_doc = utils.fit_more_rows(merged_doc)
         utils.set_default_font(merged_doc)
 
         merged_tables = []
@@ -130,7 +125,7 @@ class DocumentGenerator:
                     picture_path=config.get("picture_path"),
                     picture_height=config.get("picture_height"),
                     picture_width=config.get("picture_width"),
-                    picture_mode=config.get("picture_mode", "first_cell")
+                    picture_mode=config.get("picture_mode", "first_cell"),
                 )
         return merged_doc
 
@@ -212,7 +207,6 @@ class DocumentGenerator:
                 for child in source_cell:
                     utils.update_nested_table_styles(source_cell, source_row_element)
                     target_cell.append(copy.deepcopy(child))
-
             for cell in merged_table.rows[target_row_index].cells:
                 for paragraph in cell.paragraphs:
                     for run in paragraph.runs:
@@ -231,14 +225,22 @@ class DocumentGenerator:
                     for cell in merged_table.rows[target_row_index].cells:
                         p = cell.add_paragraph()
                         picture.add_float_picture(
-                            p, picture_path, height=picture_height, width=picture_width,
-                            pos_x=Pt(0), pos_y=Pt(0)
+                            p,
+                            picture_path,
+                            height=picture_height,
+                            width=picture_width,
+                            pos_x=Pt(0),
+                            pos_y=Pt(0),
                         )
                 else:
                     p = merged_table.rows[target_row_index].cells[0].add_paragraph()
                     picture.add_float_picture(
-                        p, picture_path, height=picture_height, width=picture_width,
-                        pos_x=Pt(0), pos_y=Pt(0)
+                        p,
+                        picture_path,
+                        height=picture_height,
+                        width=picture_width,
+                        pos_x=Pt(0),
+                        pos_y=Pt(0),
                     )
 
     # --- Public Methods for Document Generation ---
@@ -287,7 +289,7 @@ class DocumentGenerator:
             "templates/protocol_milana.docx", populator
         )
 
-    def create_confirmation_page(self, picture_path):
+    def create_confirmation_page(self, picture_path, template_path):
         table_configs = [
             {
                 "cols": 2,
@@ -302,15 +304,11 @@ class DocumentGenerator:
                 "picture_width": Inches(7.85),
             },
         ]
-        return self._create_merged_doc_from_template_rows(
-            "templates/milana_conf_page.docx", table_configs
-        )
+        return self._create_merged_doc_from_template_rows(template_path, table_configs)
 
-    def create_height_certificate(self):
+    def create_height_certificate(self, template="templates/height_certificate.docx"):
         table_configs = [{"cols": 3}]
-        return self._create_merged_doc_from_template_rows(
-            "templates/height_certificate.docx", table_configs
-        )
+        return self._create_merged_doc_from_template_rows(template, table_configs)
 
     def create_tractor_certificate(self, picture_front, picture_back):
         table_configs = [
@@ -499,7 +497,6 @@ if use_custom_duration:
     )
 
 
-
 today = datetime.date.today()
 beginning_date = st.date_input("дата начала", value=today)
 end_date = st.date_input("дата окончания", value=today)
@@ -589,7 +586,8 @@ replacement_dict = {
     "expiration_date": (
         ""
         if duration_in_years == 0
-        else "Действительно до " + utils.format_date((end_date + relativedelta(years=duration_in_years)))
+        else "Действительно до "
+        + utils.format_date((end_date + relativedelta(years=duration_in_years)))
     ),
 }
 if student_profession:
@@ -627,7 +625,8 @@ doc_options = {
     },
     "Милана (удостоверение)": {
         "func": lambda: generator.create_confirmation_page(
-            "pictures/tractor-background-green.png"
+            "pictures/tractor-background-green.png",
+            "templates/milana_conf_page.docx",
         ),
         "col": 2,
     },
@@ -635,28 +634,41 @@ doc_options = {
         "func": generator.create_certificate_for_labour_protection,
         "col": 2,
     },
-    "На высоте": {"func": generator.create_height_certificate, "col": 2},
+    "На высоте II": {"func": generator.create_height_certificate, "col": 2},
+    "На высоте III": {
+        "func": lambda: generator.create_height_certificate(
+            "templates/row_height_3.docx"
+        ),
+        "col": 2,
+    },
     "Удостоверение Роза": {"func": generator.create_ud, "col": 1},
     "Диплом": {"func": generator.create_diploma, "col": 1},
+    "Свидетельство с должностью": {
+        "func": lambda: generator.create_confirmation_page(
+            "pictures/tractor-background-green.png",
+            "templates/milana_conf_page_with_student_role.docx",
+        ),
+        "col": 2,
+    },
 }
 
 # --- State Management for Checkboxes ---
 
 # --- State Management for Checkboxes (this part is the same) ---
-if "doc_selections" not in st.session_state:
-    st.session_state.doc_selections = {name: False for name in doc_options.keys()}
+for name in doc_options.keys():
+    if name not in st.session_state:
+        st.session_state[name] = False
 
 
 def handle_select_all(column_key, docs_in_column):
     new_state = st.session_state[column_key]
     for doc in docs_in_column:
-        st.session_state.doc_selections[doc] = new_state
+        st.session_state[doc] = new_state
 
 
-# --- Updated Checkbox UI ---
 st.subheader("Выберите документы для генерации и скачивания:")
 
-# 1. Filter the document names into two lists based on their 'col' value
+# (The filtering logic is the same)
 col1_docs = [name for name, config in doc_options.items() if config["col"] == 1]
 col2_docs = [name for name, config in doc_options.items() if config["col"] == 2]
 
@@ -664,9 +676,8 @@ col1, col2 = st.columns(2)
 
 # --- Render Column 1 ---
 with col1:
-    # Determine the state of the master checkbox based on the children in this column
-    all_col1_selected = all(st.session_state.doc_selections[name] for name in col1_docs)
-
+    # Determine state based on the children in this column
+    all_col1_selected = all(st.session_state[name] for name in col1_docs)
     st.checkbox(
         "Выбрать все в этом столбце",
         value=all_col1_selected,
@@ -675,15 +686,14 @@ with col1:
         args=("select_all_col1", col1_docs),
     )
     st.markdown("---")
-    # Create the individual checkboxes for only the column 1 documents
+    # THE FIX: Use the document 'name' as the key directly
     for name in col1_docs:
-        st.checkbox(name, key=f"cb_{name}", value=st.session_state.doc_selections[name])
+        st.checkbox(name, key=name)  # No 'value' needed, key handles everything
 
 # --- Render Column 2 ---
 with col2:
-    # Determine the state of the master checkbox for the second column
-    all_col2_selected = all(st.session_state.doc_selections[name] for name in col2_docs)
-
+    # Determine state based on the children in this column
+    all_col2_selected = all(st.session_state[name] for name in col2_docs)
     st.checkbox(
         "Выбрать все в этом столбце",
         value=all_col2_selected,
@@ -692,10 +702,9 @@ with col2:
         args=("select_all_col2", col2_docs),
     )
     st.markdown("---")
-    # Create the individual checkboxes for only the column 2 documents
+    # THE FIX: Use the document 'name' as the key directly
     for name in col2_docs:
-        st.checkbox(name, key=f"cb_{name}", value=st.session_state.doc_selections[name])
-
+        st.checkbox(name, key=name)
 
 if st.button("Сгенерировать и подготовить к скачиванию"):
     # Input validation
@@ -706,11 +715,7 @@ if st.button("Сгенерировать и подготовить к скачи
         progress_bar = st.progress(0, "Начинаем генерацию...")
 
         # Get the list of selected documents directly from session state
-        selected_docs = [
-            name
-            for name, selected in st.session_state.doc_selections.items()
-            if selected
-        ]
+        selected_docs = [name for name in doc_options.keys() if st.session_state[name]]
         total_docs = len(selected_docs)
 
         # Loop and generate only the selected documents
