@@ -650,6 +650,13 @@ doc_options = {
         ),
         "col": 2,
     },
+    "Отходы": {
+        "func": lambda: generator.create_confirmation_page(
+            "pictures/residue-reverse.png",
+            "templates/residue.docx",
+        ),
+        "col": 2,
+    },
 }
 
 # --- State Management for Checkboxes ---
