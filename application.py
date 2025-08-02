@@ -469,7 +469,7 @@ class DocumentGenerator:
         return self._create_merged_doc_from_template_rows(
             "templates/diploma.docx", table_configs
         )
-    
+
     def _get_page_break_element(self):
         """
         Creates and returns the low-level lxml element for a page break paragraph.
@@ -504,6 +504,7 @@ class DocumentGenerator:
 
         # 2. ASSEMBLE THE FINAL DOCUMENT
         merged_doc = Document()
+        merged_doc = utils.fit_more_rows(merged_doc)
         utils.set_default_font(merged_doc)
         # Get the raw XML for a page break paragraph.
         page_break_element = self._get_page_break_element()
