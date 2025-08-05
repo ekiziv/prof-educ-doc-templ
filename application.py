@@ -620,7 +620,7 @@ if student_names:
         student_data = [
             utils.Student(
                 name=row.student_name,
-                cert_number=row.cert_number,
+                cert_number=str(row.cert_number),
                 machine_category=row.machine_category,
                 role=row.role,
                 razryad=str(row.razryad),
