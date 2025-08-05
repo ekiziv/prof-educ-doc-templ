@@ -601,9 +601,7 @@ if student_names:
     )
     print(df)
     try:
-        df["cert_number"] = (
-            pd.to_numeric(df["cert_id_raw"].astype(str).str.strip("."), errors="coerce")
-        )
+        df["cert_number"] = df["cert_id_raw"].astype(str).str.strip(".")
         df["razryad"] = (
             pd.to_numeric(df["razryad"].astype(str).str.strip("."), errors="coerce")
             .fillna(0)
@@ -620,7 +618,7 @@ if student_names:
         student_data = [
             utils.Student(
                 name=row.student_name,
-                cert_number=str(row.cert_number),
+                cert_number=row.cert_number,
                 machine_category=row.machine_category,
                 role=row.role,
                 razryad=str(row.razryad),
