@@ -599,7 +599,6 @@ if student_names:
         engine="python",  # A more robust engine for varied delimiters or formats
         index_col=False,
     )
-    print(df)
     try:
         df["cert_number"] = df["cert_id_raw"].astype(str).str.strip(".")
         df["razryad"] = (
