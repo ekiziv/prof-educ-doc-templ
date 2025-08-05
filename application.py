@@ -593,17 +593,16 @@ if student_names:
     # We tell it the separator is a tab ('\t') and there's no header row.
     df = pd.read_csv(
         data_io,
-        sep=r"\t+",  # Specify the delimiter is a tab
+        sep=r"\t",  # Specify the delimiter is a tab
         header=None,  # The input data has no header row
         names=column_names,  # Assign our defined column names
         engine="python",  # A more robust engine for varied delimiters or formats
         index_col=False,
     )
+    print(df)
     try:
         df["cert_number"] = (
             pd.to_numeric(df["cert_id_raw"].astype(str).str.strip("."), errors="coerce")
-            .fillna(0)
-            .astype(int)
         )
         df["razryad"] = (
             pd.to_numeric(df["razryad"].astype(str).str.strip("."), errors="coerce")
@@ -621,7 +620,7 @@ if student_names:
         student_data = [
             utils.Student(
                 name=row.student_name,
-                cert_number=str(row.cert_number),
+                cert_number=row.cert_number,
                 machine_category=row.machine_category,
                 role=row.role,
                 razryad=str(row.razryad),
