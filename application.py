@@ -15,7 +15,7 @@ from lxml import etree
 
 from docx import Document
 from docx.oxml import OxmlElement
-from docx.shared import Inches, Pt
+from docx.shared import Inches, Pt, Mm
 from docx.oxml import register_element_cls
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from dataclasses import dataclass
