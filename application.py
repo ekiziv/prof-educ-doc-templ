@@ -352,37 +352,56 @@ class DocumentGenerator:
 
     def create_ud(self):
         """
-        Generates the 'Удостоверение' document by creating a sequence of tables
-        for each student and appending them to a final document.
-
-        This method assumes 'templates/x' contains exactly two tables:
-        - Table 1 (e.g., 2 columns, 3 rows)
-        - Table 2 (e.g., 2 columns, 4 rows)
+        Generates the 'Удостоверение' document optimized for double-sided printing.
+        It groups all "front pages" (Table 1) first, followed by a page break,
+        and then all "back pages" (Table 2).
         """
         if not self.students:
             return Document()
 
-        # 1. Create the final, empty document that we will add everything to.
-        merged_doc = Document()
-        utils.set_default_font(merged_doc)
-
-        # 2. Loop through each student to generate their set of tables.
-        for index, student in enumerate(self.students):
-            # Create a dictionary with this student's specific data.
+        # 1. PRE-COMPUTATION: Render the template once for each student and store the result.
+        # This is efficient because we don't re-render the template multiple times.
+        rendered_docs = []
+        for student in self.students:
             local_dict = make_student_copy(self.replacement_dict, student)
-
-            # Render the template with the student's data. This creates an
-            # in-memory doc with the two fully-rendered tables.
             template_doc = DocxTemplate("templates/roza_ud.docx")
             template_doc.render(local_dict)
+            rendered_docs.append(template_doc)
 
-            # 3. Deep-copy each table from the rendered template into the final document.
-            #    This is the core logic for appending whole tables.
-            for table in template_doc.tables:
-                # We append a deep copy of the table's underlying XML element.
-                tbl_element = copy.deepcopy(table._tbl)
+        # If the template had no tables or there were no students, exit early.
+        if not rendered_docs or not rendered_docs[0].tables:
+            return Document()
+
+        # 2. ASSEMBLE THE FINAL DOCUMENT
+        merged_doc = Document()
+            
+        # Set the page layout to A4 standard dimensions
+        section = merged_doc.sections[0]
+        section.page_width = Mm(210)
+        section.page_height = Mm(297)
+        section.top_margin = Inches(0.2)
+        section.bottom_margin = Inches(0.2)
+        section.left_margin = Inches(0.2)
+        section.right_margin = Inches(0.2)
+        
+        utils.set_default_font(merged_doc)
+
+        # Get the number of tables from the first student's doc (we assume all are the same).
+        num_tables_in_template = len(rendered_docs[0].tables)
+
+        # 3. Outer loop: Iterate through the TABLE INDEX (0 for fronts, 1 for backs).
+        for table_index in range(num_tables_in_template):
+            
+            # 4. Inner loop: Iterate through the pre-rendered STUDENT documents.
+            for student_doc in rendered_docs:
+                
+                # Get the specific table we need (e.g., table 0) from the current student's document.
+                source_table = student_doc.tables[table_index]
+                
+                # Append a deep copy of its XML to the final document.
+                tbl_element = copy.deepcopy(source_table._tbl)
                 merged_doc._body._body.append(tbl_element)
-
+                
         return merged_doc
 
     def create_tractor_certs(self):
