@@ -669,7 +669,9 @@ if student_profession:
     if student_profession.hours_str:
         replacement_dict["hours"] = student_profession.hours_str
     if student_profession.formatted_profession:
+        # Key for the FULL formatted name (e.g., "Тракторист (160 часов)")
         replacement_dict["student_profession"] = student_profession.formatted_profession
+    replacement_dict["profession_name"] = student_profession.name
 
 # ==============================================================================
 # --- Document Generation and UI ---
