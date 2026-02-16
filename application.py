@@ -40,6 +40,10 @@ CERT_WIDTH_INCHES = Inches(5.59)
 TRACTOR_CERT_HEIGHT = Inches(5.63)
 TRACTOR_CERT_WIDTH = Inches(8.04)
 
+ROZA_NEW_CERT_HEIGHT = Inches(5.52)
+ROZA_NEW_CERT_WIDTH = Inches(7.85)
+
+
 register_element_cls("wp:anchor", picture.CT_Anchor)
 
 def make_student_copy(replacement_dict, student):
@@ -210,8 +214,9 @@ class DocumentGenerator:
             for cell in merged_table.rows[target_row_index].cells:
                 for paragraph in cell.paragraphs:
                     for run in paragraph.runs:
-                        if "prof_educ_logo" in run.text:
+                        if "prof_educ_logo" in run.text or 'profeduclogo' in run.text:
                             run.text = run.text.replace("prof_educ_logo", "")
+                            run.text = run.text.replace('profeduclogo', '')
                             run.add_picture("pictures/professional-education-logo.png")
                         if "bigger_educ_logo" in run.text:
                             run.text = run.text.replace("bigger_educ_logo", "")
@@ -420,6 +425,29 @@ class DocumentGenerator:
             "pictures/tractor-background-green-with-tractor.png",
         )
         return (blue, green)
+    
+    def create_roza_new_certificate(self, picture_front, picture_back):
+        """
+        Generates the new Roza certificate with front and back backgrounds.
+        Structured similarly to the tractor certificates (2 columns per row).
+        """
+        table_configs = [
+            {
+                "cols": 2,
+                "picture_path": picture_front,
+                "picture_height": ROZA_NEW_CERT_HEIGHT,
+                "picture_width": ROZA_NEW_CERT_WIDTH,
+            },
+            {
+                "cols": 2,
+                "picture_path": picture_back,
+                "picture_height": ROZA_NEW_CERT_HEIGHT,
+                "picture_width": ROZA_NEW_CERT_WIDTH,
+            },
+        ]
+        return self._create_merged_doc_from_template_rows(
+            "templates/roza_cert_new.docx", table_configs
+        )
 
     # --- Methods with unique logic, kept as is but moved into the class ---
 
@@ -735,6 +763,13 @@ doc_options = {
         "col": 2,
     },
     "Электобезопасность": {"func": generator.create_electro_safety, "col": 2},
+    "Свидетельство Роза (новое)": {
+        "func": lambda: generator.create_roza_new_certificate(
+            "pictures/roza_cert_new_front.png",
+            "pictures/roza_cert_new_back.png"
+        ),
+        "col": 1,
+    },
 }
 
 # --- State Management for Checkboxes ---
