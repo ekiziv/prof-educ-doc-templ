@@ -2,7 +2,7 @@ import utils
 from utils import Profession
 import picture
 import profession_parsing
-
+import sys
 import docx
 import math
 import streamlit as st
@@ -109,12 +109,12 @@ class DocumentGenerator:
         merged_tables = []
         for i, config in enumerate(table_configs):
             num_cols = config.get("cols", 1)
+            if i > 0:
+                merged_doc.add_page_break()
             merged_tables.append(
                 merged_doc.add_table(rows=len(self.students), cols=num_cols)
             )
-            if i > 0:
-                merged_doc.add_page_break()
-
+            
         for student_index, student in enumerate(self.students):
             local_dict = make_student_copy(self.replacement_dict, student)
             template_doc = DocxTemplate(template_path)
@@ -619,7 +619,20 @@ teacher_name = utils.choose_teacher(utils.load_from_pickle("data/teachers.pickle
 company = st.text_input(
     "Предприятие", "заявление", placeholder="Наименование предприятия или 'заявление'"
 )
-student_names = st.text_area("Введите имена студентов, по одному на строку")
+
+is_debug_mode = "--debug" in sys.argv
+DEBUG_STUDENTS_DATA = (
+    "105.\t22.01.2024\tОТ на высоте\tСовбанов Виталий Витальевич\tD\t1\n"
+    "106.\t22.01.2024\tОТ на высоте\tБирюкова Светлана Николаевна\tA1\t2\n"
+    "107.\t22.01.2024\tОТ на высоте\tФурсова Виктория Федоровна\tF\t3"
+)
+default_student_names = DEBUG_STUDENTS_DATA if is_debug_mode else ""
+
+student_names = st.text_area(
+    "Введите имена студентов, по одному на строку", 
+    value=default_student_names
+)
+
 
 # Define column names for clarity. This is a huge advantage.
 column_names = [
